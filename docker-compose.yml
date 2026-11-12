@@ -1,0 +1,27 @@
+services:
+  reoview:
+    build: .
+    container_name: reoview
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      TZ: "Europe/Berlin"                       # time zone used for the alert schedule
+      DATA_DIR: "/data"                         # cameras, settings, alerts, push keys
+      HLS_DIR: "/tmp/hls"                       # live stream segments (tmpfs)
+      STORAGE_ROOT: "/storage"                  # mounted camera video folders (needs write access for cleanup)
+      REOVIEW_TRANSCODE: "0"                    # 0 = copy camera stream, 1 = re-encode (640px, 15 fps)
+      REOVIEW_SNAP_TYPE: "sub"                  # alert photo: sub = fast, main = full resolution
+      REOVIEW_COOLDOWN: "30"                    # seconds between alerts per camera and type
+      REOVIEW_WEBHOOK_SECRET: ""                # if set, webhooks must carry this secret
+      REOVIEW_VAPID_SUB: "mailto:reoview@example.com"  # contact sent to the push service
+      REOVIEW_MIN_VIDEO_KB: "500"               # newest clip smaller than this -> use the one before
+      REOVIEW_VIDEO_WAIT_S: "300"               # max wait for a clip to finish recording
+      REOVIEW_VIDEO_SETTLE_S: "10"              # seconds a clip must stay unchanged to count as finished
+      REOVIEW_RESOLVED_DAYS: "7"                # delete resolved alerts after this many days
+      REOVIEW_MAX_ALERT_GB: "3"                 # size cap for saved alert photos and videos
+    volumes:
+      - ./data:/data
+      - /media/reolink:/storage
+    tmpfs:
+      - /tmp/hls

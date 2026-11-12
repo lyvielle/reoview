@@ -1,0 +1,3 @@
+pywebpush==2.0.3
+py-vapid==1.9.2
+http-ece==1.2.1

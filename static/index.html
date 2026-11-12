@@ -1,0 +1,521 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Reoview</title>
+<link rel="icon" type="image/png" href="/static/icon-192.png">
+<link rel="manifest" href="/static/manifest.webmanifest">
+<meta name="theme-color" content="#ffffff">
+<link rel="apple-touch-icon" href="/static/icon-192.png">
+<style>
+:root{--bg:#f5f6f8;--card:#fff;--ink:#14181f;--muted:#6b7280;--line:#e5e7eb;--accent:#2563eb;--bad:#dc2626;--ok:#16a34a}
+*{box-sizing:border-box}
+body{margin:0;display:flex;min-height:100vh;background:var(--bg);color:var(--ink);font:15px/1.4 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+button,.btn{font:inherit;cursor:pointer;border:0;border-radius:10px;padding:9px 16px;background:var(--accent);color:#fff;font-weight:600;text-decoration:none;display:inline-block;text-align:center}
+button.soft,.btn.soft{background:#eef0f3;color:var(--ink)}
+button.danger{background:var(--bad)}
+button.ghost{background:transparent;color:var(--muted);padding:6px 10px}
+button.ghost:hover{color:var(--bad)}
+button:disabled,.btn[aria-disabled=true]{opacity:.4;cursor:not-allowed;pointer-events:none}
+button:focus-visible,input:focus-visible,select:focus-visible,a:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+#side{width:232px;flex:none;position:sticky;top:0;height:100vh;background:var(--card);border-right:1px solid var(--line);padding:20px 14px;display:flex;flex-direction:column;gap:20px}
+.brand{display:flex;align-items:center;gap:10px;font-weight:700;font-size:20px;letter-spacing:-.02em;padding:0 8px}
+.brand img{width:28px;height:28px;border-radius:8px}
+nav{display:flex;flex-direction:column;gap:4px}
+nav a{display:flex;align-items:center;gap:12px;padding:10px 12px;border-radius:10px;color:var(--muted);text-decoration:none;font-weight:600}
+nav a svg{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+nav a:hover{background:#f1f3f6;color:var(--ink)}
+nav a.on{background:#eaf1ff;color:var(--accent)}
+.badge{margin-left:auto;background:var(--bad);color:#fff;border-radius:999px;font-size:12px;padding:1px 8px}
+#scrim{display:none}
+.content{flex:1;min-width:0}
+header{display:flex;align-items:center;gap:12px;padding:14px clamp(16px,4vw,32px);background:rgba(255,255,255,.85);backdrop-filter:blur(8px);border-bottom:1px solid var(--line);position:sticky;top:0;z-index:5}
+h1{margin:0;font-size:20px;font-weight:700;letter-spacing:-.02em}
+.hb{margin-left:auto;display:flex;gap:8px}
+#menu{display:none;padding:8px 12px}
+.pill{background:#fef3c7;color:#92400e;border-radius:999px;padding:3px 10px;font-size:12px;font-weight:600}
+main{padding:clamp(16px,4vw,32px);padding-bottom:96px}
+#addbar{position:fixed;bottom:0;left:232px;right:0;z-index:6;display:flex;justify-content:center;padding:14px 14px calc(14px + env(safe-area-inset-bottom,0px));pointer-events:none}
+#addbar button{pointer-events:auto;border-radius:999px;padding:12px 24px;box-shadow:0 6px 24px rgba(37,99,235,.35)}
+h2{font-size:15px;margin:24px 0 10px;color:var(--muted);font-weight:600}
+h2:first-child{margin-top:0}
+h2 small{font-weight:400}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,340px),1fr));gap:16px}
+#grid{grid-template-columns:repeat(auto-fit,minmax(min(100%,560px),1fr))}
+.agrid{grid-template-columns:repeat(auto-fill,minmax(min(100%,260px),1fr))}
+.card,.acard,.panel{background:var(--card);border:1px solid var(--line);border-radius:16px;overflow:hidden;box-shadow:0 1px 2px rgba(20,24,31,.04)}
+.card video{display:block;width:100%;aspect-ratio:16/9;background:#e9ecf1;object-fit:cover;cursor:zoom-in}
+.bar{display:flex;align-items:center;justify-content:space-between;padding:10px 14px}
+.ctl{display:flex;gap:8px;padding:0 14px 12px}.ctl button{flex:none;width:44px;height:38px;padding:0;display:inline-flex;align-items:center;justify-content:center}
+.ctl button.busy{position:relative;pointer-events:none}
+.ctl button.busy svg{opacity:.25}
+.ctl button.busy::after{content:"";position:absolute;width:18px;height:18px;border:2px solid currentColor;border-top-color:transparent;border-radius:50%;animation:spin .7s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.ctl svg{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.ctl button.on{background:#fef3c7;color:#92400e}.ctl button.alarm{background:var(--bad);color:#fff}
+.name{font-weight:600}.ip{color:var(--muted);font-size:13px}
+.dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--muted);margin-right:8px}
+.dot.live{background:var(--ok)}
+.empty{text-align:center;color:var(--muted);padding:60px 16px}
+.acard{cursor:pointer}.acard.done{opacity:.6}
+.thumb{position:relative;aspect-ratio:16/9;background:#e9ecf1;display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:13px}
+.thumb img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.chip{position:absolute;top:8px;left:8px;font-style:normal;font-size:12px;font-weight:600;color:#fff;border-radius:999px;padding:2px 10px;background:#6b7280}
+.chip.person{background:#2563eb}.chip.animal{background:#d97706}.chip.vehicle{background:#7c3aed}
+.ameta{padding:10px 14px;display:flex;flex-direction:column}.ameta span{color:var(--muted);font-size:13px}
+.panel{padding:18px 20px;margin-bottom:16px;max-width:560px}
+.panel h2{margin:0 0 12px}
+.row{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:8px 0}
+.row span{display:flex;flex-direction:column}.row small,.hint{color:var(--muted);font-size:13px}
+.hint{margin:8px 0 12px}
+#su{white-space:pre-line}
+.tablewrap{background:var(--card);border:1px solid var(--line);border-radius:16px;overflow:auto;box-shadow:0 1px 2px rgba(20,24,31,.04)}
+.logt{width:100%;border-collapse:collapse;font-size:14px}
+.logt th{text-align:left;font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);padding:12px 16px;border-bottom:1px solid var(--line);background:#fafbfc;white-space:nowrap}
+.logt td{padding:11px 16px;border-bottom:1px solid var(--line);white-space:nowrap}
+.logt tbody tr:last-child td{border-bottom:0}
+.logt tbody tr:hover{background:#f8f9fb}
+.sm{padding:5px 12px;font-size:13px}
+.spin{width:34px;height:34px;border:3px solid #ffffff44;border-top-color:#fff;border-radius:50%;animation:spin .8s linear infinite}
+#fview .stage{background:#f3f4f6}
+#fview .stage.dark{background:#000}
+#fview .fvload{color:var(--muted)}
+#fview .spin{border-color:#d1d5db;border-top-color:var(--accent)}
+.fvload{display:flex;flex-direction:column;align-items:center;gap:14px;color:#d1d5db;padding:56px 16px;text-align:center}
+.muted{color:var(--muted);font-size:12px;margin-left:8px}
+.res{display:inline-block;border-radius:999px;padding:2px 10px;font-size:12px;font-weight:600;background:#eef0f3;color:var(--muted)}
+.res.alert{background:#dcfce7;color:#166534}.res.filtered{background:#fef3c7;color:#92400e}.res.unknown{background:#fee2e2;color:#991b1b}
+.times{display:flex;gap:12px}.times div{flex:1}
+input[type=checkbox][role=switch]{appearance:none;flex:none;width:42px;height:24px;border-radius:999px;background:#d1d5db;position:relative;cursor:pointer;transition:background .15s;margin:0}
+input[type=checkbox][role=switch]::after{content:"";position:absolute;top:3px;left:3px;width:18px;height:18px;border-radius:50%;background:#fff;transition:transform .15s}
+input[type=checkbox][role=switch]:checked{background:var(--accent)}
+input[type=checkbox][role=switch]:checked::after{transform:translateX(18px)}
+input[type=checkbox][role=switch]:disabled{opacity:.4;cursor:not-allowed}
+dialog{border:0;border-radius:18px;padding:24px;width:min(92vw,380px);box-shadow:0 20px 60px rgba(20,24,31,.25)}
+dialog::backdrop{background:rgba(20,24,31,.35)}
+dialog h2{margin:0 0 16px;font-size:18px;color:var(--ink)}
+label{display:block;font-size:13px;color:var(--muted);margin:12px 0 4px}
+.row label{margin:0;font-size:15px;color:var(--ink)}
+input:not([type=checkbox]),select{width:100%;font:inherit;padding:10px 12px;border:1px solid var(--line);border-radius:10px;background:#fafbfc}
+.fr{display:flex;gap:8px}.fr div{flex:1}
+.actions{display:flex;justify-content:flex-end;gap:8px;margin-top:20px}
+.err{color:var(--bad);font-size:13px;margin-top:10px;min-height:1em}
+details{margin-top:12px;color:var(--muted);font-size:13px}
+#view,#aview,#fview{padding:0;overflow:hidden;border-radius:16px}
+#view{width:min(96vw,1400px);background:#000}
+#view::backdrop,#aview::backdrop,#fview::backdrop{background:rgba(10,12,16,.8)}
+#view video{display:block;width:100%;max-height:92vh;object-fit:contain;background:#000}
+#view .top{position:absolute;top:0;left:0;right:0;display:flex;justify-content:space-between;align-items:center;padding:12px 16px;color:#fff;background:linear-gradient(#0009,transparent);pointer-events:none}
+#view .top button{pointer-events:auto;background:rgba(255,255,255,.2);padding:6px 12px}
+#aview,#fview{width:min(96vw,980px);max-height:96vh}
+.aw{display:flex;flex-direction:column;gap:12px;padding:16px;max-height:96vh}
+.ah{display:flex;justify-content:space-between;align-items:flex-start;gap:12px}
+.seg{display:flex;gap:4px;padding:4px;background:#eef0f3;border-radius:12px}
+.seg button{flex:1;background:transparent;color:var(--muted);padding:8px}
+.seg button.on{background:#fff;color:var(--ink);box-shadow:0 1px 2px #0002}
+.stage{background:#000;border-radius:12px;overflow:hidden;min-height:160px;display:flex;align-items:center;justify-content:center}
+.stage img,.stage video{display:block;width:100%;max-height:62vh;object-fit:contain}
+.stage .empty{color:#9ca3af;padding:40px 16px}
+.warn{background:#fef3c7;color:#92400e;border-radius:10px;padding:8px 12px;font-size:13px}
+.af{display:flex;justify-content:flex-end;gap:8px}
+[hidden]{display:none!important}
+@media(max-width:800px){
+  #side{position:fixed;z-index:30;left:0;top:0;transform:translateX(-100%);transition:transform .2s;box-shadow:0 0 40px rgba(20,24,31,.2)}
+  #side.open{transform:none}
+  #scrim.open{display:block;position:fixed;inset:0;z-index:25;background:rgba(20,24,31,.35)}
+  #menu{display:inline-block}
+  #addbar{left:0}
+}
+</style>
+</head>
+<body>
+<aside id="side">
+  <div class="brand"><img src="/static/icon-192.png" alt="">Reoview</div>
+  <nav>
+    <a href="#cameras" data-tab="cameras"><svg viewBox="0 0 24 24"><path d="M23 7l-7 5 7 5V7z"/><rect x="1" y="5" width="15" height="14" rx="2"/></svg>Camera(s)</a>
+    <a href="#alerts" data-tab="alerts"><svg viewBox="0 0 24 24"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9M13.7 21a2 2 0 0 1-3.4 0"/></svg>Alerts<span class="badge" id="badge" hidden></span></a>
+    <a href="#logs" data-tab="logs"><svg viewBox="0 0 24 24"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg>Logs</a>
+    <a href="#settings" data-tab="settings"><svg viewBox="0 0 24 24"><path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6"/></svg>Settings</a>
+  </nav>
+</aside>
+<div id="scrim"></div>
+
+<div class="content">
+  <header>
+    <button id="menu" class="soft" aria-label="Menu">&#9776;</button>
+    <h1 id="title">Camera(s)</h1>
+    <span class="pill" id="awaypill" hidden>Away mode</span>
+  </header>
+  <main>
+    <section id="p-cameras"><div class="grid" id="grid"></div><div class="empty" id="empty" hidden>No cameras yet. Add one by its IP address.</div></section>
+
+    <section id="p-alerts" hidden><div id="alist"></div><div class="empty" id="aempty" hidden>No alerts.</div></section>
+
+    <section id="p-logs" hidden>
+      <div class="tablewrap" id="logwrap"><table class="logt"><thead><tr><th>Time</th><th>Camera</th><th>Type</th><th>Result</th><th>Video</th></tr></thead><tbody id="logbody"></tbody></table></div>
+      <div class="empty" id="logempty" hidden>No detections reported yet.</div>
+    </section>
+
+    <section id="p-settings" hidden>
+      <div class="panel"><h2>This device</h2>
+        <div class="row"><label for="pushsw"><span>Alert notifications<small id="pushnote">Receive push notifications on this device</small></span></label><input type="checkbox" role="switch" id="pushsw"></div>
+      </div>
+      <div class="panel"><h2>Alert schedule</h2>
+        <div class="times"><div><label for="s-start">From</label><input type="time" id="s-start"></div><div><label for="s-end">To</label><input type="time" id="s-end"></div></div>
+        <p class="hint">Alerts are only triggered within this window. Identical times mean all day.</p>
+        <div class="row"><label for="s-away"><span>Away from home<small>Ignores the time window while on, so every detection alerts you.</small></span></label><input type="checkbox" role="switch" id="s-away"></div>
+      </div>
+      <div class="panel"><h2>Storage</h2>
+        <p class="hint" id="su">Calculating…</p>
+        <div class="row"><label for="st-ret"><span>Delete old files<small>Removes recordings and photos older than the set age</small></span></label><input type="checkbox" role="switch" id="st-ret"></div>
+        <label for="st-days">Older than (days)</label><input type="number" min="1" id="st-days">
+        <div class="row"><label for="st-low"><span>Free space guard<small>When free space runs low, the oldest files are deleted first</small></span></label><input type="checkbox" role="switch" id="st-low"></div>
+        <label for="st-gb">Keep at least (GB free)</label><input type="number" min="1" id="st-gb">
+        <label for="pr-n">Delete files older than, once</label>
+        <div class="fr"><div><input type="number" min="1" value="30" id="pr-n" class="nosave"></div><div><select id="pr-u"><option value="1">days</option><option value="7">weeks</option><option value="30">months</option><option value="365">years</option></select></div></div>
+        <div class="actions"><button class="danger" id="pr-go">Delete…</button></div>
+        <p class="hint" id="pr-msg"></p>
+      </div>
+      <div class="panel"><h2>Detection types</h2>
+        <div class="row"><label for="t-any">Any</label><input type="checkbox" role="switch" id="t-any"></div>
+        <div class="row"><label for="t-person">Person</label><input type="checkbox" role="switch" id="t-person"></div>
+        <div class="row"><label for="t-animal">Animal</label><input type="checkbox" role="switch" id="t-animal"></div>
+        <div class="row"><label for="t-vehicle">Vehicle</label><input type="checkbox" role="switch" id="t-vehicle"></div>
+      </div>
+    </section>
+  </main>
+</div>
+
+<div id="addbar"><button id="add">+ Add camera</button></div>
+
+<dialog id="dlg">
+  <h2>Add camera</h2>
+  <label for="ip">IP address</label><input id="ip" placeholder="192.168.1.50" inputmode="decimal" autocomplete="off">
+  <label for="name">Name (optional)</label><input id="name" placeholder="Front door">
+  <div class="fr"><div><label for="user">Username</label><input id="user" value="admin" autocomplete="off"></div>
+  <div><label for="pw">Password</label><input id="pw" type="password" autocomplete="off"></div></div>
+  <label for="stor">Video storage folder (optional)</label><select id="stor"><option value="">None</option></select>
+  <details><summary>Stream settings</summary>
+    <label for="port">Port</label><input id="port" value="554" inputmode="numeric">
+    <label for="path">Stream path</label><input id="path" value="h264Preview_01_sub">
+  </details>
+  <div class="err" id="err"></div>
+  <div class="actions"><button class="soft" id="cancel">Cancel</button><button id="save">Add camera</button></div>
+</dialog>
+
+<dialog id="view"><video id="vv" muted autoplay playsinline controls></video><div class="top"><b id="vt"></b><button id="vx">Close</button></div></dialog>
+
+<dialog id="aview"><div class="aw">
+  <div class="ah"><div><b id="at"></b><div class="ip" id="asub"></div></div><button class="soft" id="ax">Close</button></div>
+  <div class="seg" id="seg"><button data-m="photo">Photo</button><button data-m="live">Live</button><button data-m="video">Video</button></div>
+  <div class="stage"><img id="aimg" alt=""><video id="av" playsinline controls></video><div class="empty" id="amsg" hidden></div></div>
+  <div class="warn" id="awarn" hidden></div>
+  <div class="af"><a class="btn soft" id="adl" download>Download</a><button id="ares">Resolve</button></div>
+</div></dialog>
+
+<dialog id="fview"><div class="aw">
+  <div class="ah"><div><b id="fv-title"></b><div class="ip" id="fv-sub"></div></div><button class="soft" id="fv-x">Close</button></div>
+  <div class="stage" id="fvstage"><video id="fvv" playsinline controls hidden></video><div class="fvload" id="fvload"><div class="spin"></div><div id="fvtext">Starting the search…</div></div></div>
+  <div class="warn">This copy is deleted automatically when you close the window.</div>
+  <div class="af"><a class="btn soft" id="fv-dlo" hidden>Download original</a><a class="btn soft" id="fv-dl" download hidden>Download converted</a></div>
+</div></dialog>
+
+<script src="/static/hls.min.js"></script>
+<script>
+const $=id=>document.getElementById(id),J={'Content-Type':'application/json'};
+const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const fmt=ts=>new Date(ts*1000).toLocaleString([],{dateStyle:'medium',timeStyle:'short'});
+const ICON_LIGHT='<svg viewBox="0 0 24 24"><path d="M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.3h6c0-1 .4-1.8 1-2.3A7 7 0 0 0 12 2z"/></svg>';
+const ICON_SIREN='<svg viewBox="0 0 24 24"><path d="M7 18v-6a5 5 0 1 1 10 0v6M5 21a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-1a2 2 0 0 0-2-2H7a2 2 0 0 0-2 2zM21 12h1M2 12h1M12 2v1M18.5 4.5 18 5M5.5 4.5 6 5"/></svg>';
+const PAGES={cameras:'Camera(s)',alerts:'Alerts',logs:'Logs',settings:'Settings'};
+const TYPES={person:'Person',animal:'Animal',vehicle:'Vehicle',other:'Other'};
+const grid=$('grid'),cards=new Map(),view=$('view'),vv=$('vv'),aview=$('aview'),av=$('av'),aimg=$('aimg');
+let tick=0,tab='cameras',cams=[],alerts=[],lastA='',S=null,cur=null,mode='photo';
+
+/* ---------- HLS ---------- */
+function attach(src,video,dot,alive){
+  const retry=()=>{dot.classList.remove('live');setTimeout(()=>alive()&&attach(src,video,dot,alive),3000)};
+  if(video._hls){video._hls.destroy();video._hls=null}
+  if(window.Hls&&Hls.isSupported()){
+    const h=new Hls({liveSyncDurationCount:2,liveMaxLatencyDurationCount:5,manifestLoadingMaxRetry:0});
+    video._hls=h;h.loadSource(src);h.attachMedia(video);
+    h.on(Hls.Events.ERROR,(_,d)=>{if(d.fatal){h.destroy();video._hls=null;retry()}});
+  }else{video.src=src;video.onerror=retry}
+  video.onplaying=()=>dot.classList.add('live');
+  video.onwaiting=()=>dot.classList.remove('live');
+}
+function stopVideo(v){v.onerror=null;v.onplaying=null;v.onwaiting=null;if(v._hls){v._hls.destroy();v._hls=null}v.pause();v.removeAttribute('src');v.load()}
+
+/* ---------- navigation ---------- */
+function show(t){
+  if(!PAGES[t])t='cameras';
+  tab=t;
+  for(const p in PAGES)$('p-'+p).hidden=p!==t;
+  document.querySelectorAll('nav a').forEach(a=>a.classList.toggle('on',a.dataset.tab===t));
+  $('title').textContent=PAGES[t];
+  $('addbar').hidden=t!=='cameras';
+  closeMenu();
+  cards.forEach((k,id)=>{if(t==='cameras'){playCard(id);refreshLight(id)}else pauseCard(k)});
+  if(t==='alerts')loadAlerts();
+  if(t==='logs')loadLogs();
+  if(t==='settings'){loadSettings();loadUsage()}
+}
+const closeMenu=()=>{$('side').classList.remove('open');$('scrim').classList.remove('open')};
+$('menu').onclick=()=>{$('side').classList.add('open');$('scrim').classList.add('open')};
+$('scrim').onclick=closeMenu;
+window.onhashchange=()=>show(location.hash.slice(1));
+
+/* ---------- cameras ---------- */
+const playCard=id=>{const k=cards.get(id);attach(`/hls/${id}/index.m3u8`,k.video,k.dot,()=>cards.has(id)&&tab==='cameras')};
+function pauseCard(k){stopVideo(k.video);k.dot.classList.remove('live')}
+function addCard(c){
+  const el=document.createElement('div');el.className='card';
+  el.innerHTML=`<video muted autoplay playsinline></video><div class="bar"><div><div class="name"><span class="dot"></span>${esc(c.name)}</div><div class="ip">${esc(c.ip)}</div></div><button class="ghost">Remove</button></div><div class="ctl"><button class="soft lt" disabled title="Light" aria-label="Light">${ICON_LIGHT}</button><button class="soft sr" title="Siren" aria-label="Siren">${ICON_SIREN}</button></div>`;
+  const video=el.querySelector('video');
+  video.onclick=()=>{$('vt').textContent=c.name;attach(`/hls/${c.id}/index.m3u8`,vv,document.createElement('span'),()=>view.open);view.showModal()};
+  el.querySelector('.ghost').onclick=async()=>{if(confirm(`Remove ${c.name}?`)){await fetch(`/api/cameras/${c.id}`,{method:'DELETE'});load()}};
+  const k={el,video,dot:el.querySelector('.dot'),lt:el.querySelector('.lt'),sr:el.querySelector('.sr'),siren:false};
+  k.lt.onclick=()=>{if(!k.lt.classList.contains('busy'))setLight(c.id,k,!k.lt.classList.contains('on'))};
+  k.sr.onclick=async()=>{
+    if(k.sr.classList.contains('busy')||(!k.siren&&!confirm(`Sound the siren on ${c.name}?`)))return;
+    k.sr.classList.add('busy');
+    try{await camPost(c.id,'siren',!k.siren);k.siren=!k.siren;{const t=k.siren?'Stop siren':'Siren';k.sr.title=t;k.sr.setAttribute('aria-label',t)}k.sr.classList.toggle('alarm',k.siren)}catch(e){alert(e.message)}
+    k.sr.classList.remove('busy');
+  };
+  grid.append(el);cards.set(c.id,k);
+  if(tab==='cameras'){playCard(c.id);refreshLight(c.id)}
+}
+async function camPost(id,what,on){
+  const r=await fetch(`/api/cameras/${id}/${what}`,{method:'POST',headers:J,body:JSON.stringify({on})});
+  if(!r.ok)throw new Error((await r.json().catch(()=>({}))).error||'Camera did not respond');
+}
+async function setLight(id,k,want){
+  k.lt.classList.add('busy');
+  try{
+    await camPost(id,'light',want);
+    for(let i=0;i<15;i++){
+      await new Promise(r=>setTimeout(r,1000));
+      const r=await fetch(`/api/cameras/${id}/light`);
+      if(r.ok&&(await r.json()).on===want)break;
+    }
+  }catch(e){alert(e.message)}
+  k.lt.classList.remove('busy');
+  refreshLight(id);
+}
+async function refreshLight(id){
+  const k=cards.get(id);if(!k||k.lt.classList.contains('busy'))return;
+  try{const r=await fetch(`/api/cameras/${id}/light`);if(!r.ok)throw 0;const j=await r.json();
+    k.lt.disabled=false;k.lt.classList.toggle('on',j.on);{const t=j.on?'Light on':'Light off';k.lt.title=t;k.lt.setAttribute('aria-label',t)}}
+  catch{k.lt.disabled=true;k.lt.title='Light unavailable';k.lt.setAttribute('aria-label','Light unavailable')}
+}
+view.onclose=()=>stopVideo(vv);
+view.onclick=e=>{if(e.target===view)view.close()};
+$('vx').onclick=()=>view.close();
+async function load(){
+  cams=await (await fetch('/api/cameras')).json();
+  const ids=new Set(cams.map(c=>c.id));
+  for(const [id,k] of cards)if(!ids.has(id)){pauseCard(k);k.el.remove();cards.delete(id)}
+  for(const c of cams)if(!cards.has(c.id))addCard(c);
+  $('empty').hidden=cams.length>0;
+}
+$('add').onclick=async()=>{
+  $('err').textContent='';
+  try{const dirs=await (await fetch('/api/storage')).json();
+    $('stor').innerHTML='<option value="">None</option>'+dirs.map(d=>`<option>${esc(d)}</option>`).join('')}catch{}
+  $('dlg').showModal();$('ip').focus();
+};
+$('cancel').onclick=()=>$('dlg').close();
+$('save').onclick=async()=>{
+  const r=await fetch('/api/cameras',{method:'POST',headers:J,body:JSON.stringify({
+    ip:$('ip').value,name:$('name').value,user:$('user').value,password:$('pw').value,port:$('port').value,path:$('path').value,storage:$('stor').value})});
+  if(!r.ok){$('err').textContent=(await r.json()).error||'Could not add camera';return}
+  $('dlg').close();$('ip').value=$('name').value=$('pw').value='';load();
+};
+
+/* ---------- alerts ---------- */
+const card=a=>`<div class="acard${a.resolved?' done':''}" data-id="${a.id}"><div class="thumb">${a.snap?`<img loading="lazy" alt="" src="/alerts/${a.id}/${a.thumb?'thumb':'snap'}">`:'No photo'}<em class="chip ${a.type}">${TYPES[a.type]}</em></div><div class="ameta"><b>${esc(a.cam)}</b><span>${fmt(a.ts)}${a.resolved?' · resolved':''}</span></div></div>`;
+async function loadAlerts(){
+  const txt=await (await fetch('/api/alerts')).text();
+  const un=JSON.parse(txt).filter(a=>!a.resolved).length;
+  $('badge').hidden=!un;$('badge').textContent=un;
+  if(txt===lastA)return;
+  lastA=txt;alerts=JSON.parse(txt);
+  const open=alerts.filter(a=>!a.resolved),done=alerts.filter(a=>a.resolved);
+  let h='';
+  for(const t in TYPES){const l=open.filter(a=>a.type===t);if(l.length)h+=`<h2>${TYPES[t]} <small>${l.length}/5</small></h2><div class="grid agrid">${l.map(card).join('')}</div>`}
+  if(done.length)h+=`<h2>Resolved</h2><div class="grid agrid">${done.map(card).join('')}</div>`;
+  $('alist').innerHTML=h;$('aempty').hidden=alerts.length>0;
+}
+$('alist').onclick=e=>{const c=e.target.closest('.acard');if(c)openAlert(c.dataset.id)};
+function msg(t){$('amsg').textContent=t||'';$('amsg').hidden=!t}
+function setMode(m){
+  mode=m;stopVideo(av);msg('');
+  document.querySelectorAll('#seg button').forEach(b=>b.classList.toggle('on',b.dataset.m===m));
+  aimg.hidden=m!=='photo'||!cur.snap;av.hidden=m==='photo';
+  let dl='';
+  if(m==='photo'){
+    if(cur.snap){aimg.src=`/alerts/${cur.id}/snap`;dl=`/alerts/${cur.id}/snap?download=1`}else msg('No photo could be captured for this alert.');
+  }else if(m==='live'){
+    av.muted=true;av.autoplay=true;attach(`/hls/${cur.cam_id}/index.m3u8`,av,document.createElement('span'),()=>aview.open&&mode==='live');
+  }else{
+    av.muted=false;av.autoplay=false;av.src=`/alerts/${cur.id}/video`;dl=`/alerts/${cur.id}/video?download=1`;
+  }
+  const d=$('adl');
+  if(dl){d.href=dl;d.removeAttribute('aria-disabled')}else{d.removeAttribute('href');d.setAttribute('aria-disabled','true')}
+}
+function openAlert(id){
+  cur=alerts.find(a=>a.id===id);if(!cur)return;
+  const live=cams.some(c=>c.id===cur.cam_id);
+  $('at').textContent=`${cur.cam} · ${TYPES[cur.type]}`;$('asub').textContent=fmt(cur.ts);
+  const b=m=>document.querySelector(`#seg [data-m=${m}]`);
+  b('photo').disabled=!cur.snap;b('live').disabled=!live;b('video').disabled=!cur.video;
+  const w=!cur.storage?"Storage for this camera hasn't been set up, so no video can be saved or downloaded.":cur.pending?'The video is still being recorded or processed. It appears here once it is ready.':!cur.video?'No video file was found for this alert.':'';
+  $('awarn').textContent=w;$('awarn').hidden=!w;
+  $('ares').textContent=cur.resolved?'Delete':'Resolve';$('ares').classList.toggle('danger',cur.resolved);
+  setMode(cur.snap?'photo':live?'live':'photo');
+  aview.showModal();
+}
+$('seg').onclick=e=>{const b=e.target.closest('button');if(b&&!b.disabled)setMode(b.dataset.m)};
+$('ares').onclick=async()=>{
+  if(!cur)return;
+  if(cur.resolved){if(!confirm('Delete this alert with its photo and video?'))return;await fetch(`/api/alerts/${cur.id}`,{method:'DELETE'})}
+  else await fetch(`/api/alerts/${cur.id}/resolve`,{method:'POST'});
+  aview.close();loadAlerts();
+};
+aview.onclose=()=>{stopVideo(av);aimg.removeAttribute('src')};
+aview.onclick=e=>{if(e.target===aview)aview.close()};
+$('ax').onclick=()=>aview.close();
+
+/* ---------- logs ---------- */
+let logsData=[];
+async function loadLogs(){
+  const l=logsData=await (await fetch('/api/logs')).json();
+  const cls=r=>r==='alert'?'alert':r.startsWith('filtered')?'filtered':r==='unknown camera'?'unknown':'';
+  $('logbody').innerHTML=l.map((d,i)=>{
+    const cam=cams.find(c=>c.id===d.cam_id)||cams.find(c=>c.name===d.cam),ok=cam&&cam.storage;
+    return `<tr><td>${new Date(d.ts*1000).toLocaleString([],{dateStyle:'medium',timeStyle:'medium'})}</td><td>${esc(d.cam)}</td><td>${TYPES[d.type]}${d.raw?`<span class="muted">${esc(d.raw)}</span>`:''}</td><td><span class="res ${cls(d.result)}">${esc(d.result[0].toUpperCase()+d.result.slice(1))}</span></td><td><button class="soft sm fv" data-i="${i}" ${ok?'':'disabled'} title="${ok?'Search the recordings for this time':'No storage folder set for this camera'}">Find video</button></td></tr>`;
+  }).join('');
+  $('logwrap').hidden=!l.length;$('logempty').hidden=l.length>0;
+}
+
+/* ---------- find video ---------- */
+const fvv=$('fvv'),fview=$('fview');
+let fj=null,ft=null;
+const FSTAGE={queued:'Waiting for another search to finish…',searching:'Searching the recordings…',preparing:'Preparing the video…',converting:'Converting for playback…'};
+function fvState(text,spin){$('fvload').hidden=false;fvv.hidden=true;$('fvtext').textContent=text;$('fvload').querySelector('.spin').hidden=!spin;$('fv-dl').hidden=true;$('fv-dlo').hidden=true;$('fvstage').classList.remove('dark')}
+async function findVideo(cam,d){
+  $('fv-title').textContent=cam.name;
+  $('fv-sub').textContent=new Date(d.ts*1000).toLocaleString([],{dateStyle:'medium',timeStyle:'medium'});
+  fvState('Starting the search…',true);fview.showModal();
+  try{
+    const r=await fetch('/api/findvideo',{method:'POST',headers:J,body:JSON.stringify({cam_id:cam.id,ts:d.ts})}),j=await r.json();
+    if(!r.ok){fvState(j.error||'The search failed.',false);return}
+    fj=j.job;pollFind();
+  }catch{fvState('Could not reach the server.',false)}
+}
+async function pollFind(){
+  const id=fj;if(!id)return;
+  try{
+    const s=await (await fetch(`/api/findvideo/${id}`)).json();
+    if(fj!==id)return;
+    if(s.status==='ready'){
+      fvState('Loading the video…',true);
+      const reveal=()=>{if(fj!==id)return;$('fvload').hidden=true;fvv.hidden=false;$('fvstage').classList.add('dark');fvv.play().catch(()=>{})};
+      fvv.onerror=()=>{fvState('The video could not be played here. You can still download the original.',false);$('fv-dlo').hidden=false};
+      fvv.onloadedmetadata=()=>{
+        if(s.offset>0){fvv.onseeked=()=>{fvv.onseeked=null;reveal()};fvv.currentTime=s.offset}
+        else fvv.oncanplay=()=>{fvv.oncanplay=null;reveal()};
+      };
+      fvv.src=`/api/findvideo/${id}/file`;
+      $('fv-dlo').href=`/api/findvideo/${id}/original`;$('fv-dlo').hidden=false;
+      if(s.converted){$('fv-dl').href=`/api/findvideo/${id}/file?download=1`;$('fv-dl').hidden=false}
+    }else if(s.status==='notfound'||s.status==='error')fvState(s.msg,false);
+    else{fvState((FSTAGE[s.status]||'Working…')+(s.status==='converting'&&s.progress>0?` ${Math.round(s.progress*100)}%`:''),true);ft=setTimeout(pollFind,1500)}
+  }catch{ft=setTimeout(pollFind,3000)}
+}
+fview.onclose=()=>{clearTimeout(ft);fvv.onloadedmetadata=fvv.onseeked=fvv.oncanplay=null;stopVideo(fvv);const id=fj;fj=null;if(id)fetch(`/api/findvideo/${id}`,{method:'DELETE',keepalive:true})};
+fview.onclick=e=>{if(e.target===fview)fview.close()};
+$('fv-x').onclick=()=>fview.close();
+addEventListener('pagehide',()=>{if(fj)fetch(`/api/findvideo/${fj}`,{method:'DELETE',keepalive:true})});
+$('logbody').onclick=e=>{
+  const b=e.target.closest('.fv');if(!b||b.disabled)return;
+  const d=logsData[+b.dataset.i],cam=cams.find(c=>c.id===d.cam_id)||cams.find(c=>c.name===d.cam);
+  if(cam)findVideo(cam,d);
+};
+
+/* ---------- settings ---------- */
+const TK=['any','person','animal','vehicle'];
+function fillSettings(){
+  $('st-ret').checked=S.retention_on;$('st-days').value=S.retention_days;$('st-low').checked=S.lowspace_on;$('st-gb').value=S.lowspace_gb;
+  $('s-start').value=S.start;$('s-end').value=S.end;$('s-away').checked=S.away;
+  TK.forEach(t=>$('t-'+t).checked=S.types[t]);
+  ['person','animal','vehicle'].forEach(t=>$('t-'+t).disabled=S.types.any);
+  $('awaypill').hidden=!S.away;
+}
+async function loadSettings(){S=await (await fetch('/api/settings')).json();fillSettings()}
+async function saveSettings(){
+  const types={};TK.forEach(t=>types[t]=$('t-'+t).checked);
+  S=await (await fetch('/api/settings',{method:'PUT',headers:J,body:JSON.stringify({start:$('s-start').value,end:$('s-end').value,away:$('s-away').checked,types,retention_on:$('st-ret').checked,retention_days:+$('st-days').value||30,lowspace_on:$('st-low').checked,lowspace_gb:+$('st-gb').value||10})})).json();
+  fillSettings();
+}
+document.querySelectorAll('#p-settings input:not(#pushsw):not(.nosave)').forEach(i=>i.onchange=saveSettings);
+
+const fmtBytes=b=>b>=2**30?(b/2**30).toFixed(1)+' GB':b>=2**20?(b/2**20).toFixed(0)+' MB':(b/1024).toFixed(0)+' KB';
+async function loadUsage(){
+  const el=$('su');el.textContent='Calculating…';
+  try{
+    const u=await (await fetch('/api/storage/usage')).json();
+    if(!u.mounted){el.textContent='No storage folder is mounted.';$('pr-go').disabled=true;return}
+    const dirs=Object.entries(u.dirs).sort((a,b)=>b[1]-a[1]).map(([n,b])=>`${n}: ${fmtBytes(b)}`).join(' · ');
+    el.textContent=`${fmtBytes(u.bytes)} in ${u.files.toLocaleString()} files · ${fmtBytes(u.free)} free of ${fmtBytes(u.total)}`+(dirs?`\n${dirs}`:'')+(u.writable?'':'\nMounted read-only, so deleting is disabled.');
+    $('pr-go').disabled=!u.writable;
+  }catch{el.textContent='Could not read the storage folder.'}
+}
+$('pr-go').onclick=async()=>{
+  const n=+$('pr-n').value,unit=$('pr-u').selectedOptions[0].text,days=n*(+$('pr-u').value),msg=$('pr-msg');
+  if(!(n>=1)){msg.textContent='Enter a number of at least 1.';return}
+  const post=body=>fetch('/api/storage/prune',{method:'POST',headers:J,body:JSON.stringify(body)}).then(r=>r.json());
+  const dry=await post({days,dry:true});
+  if(dry.error){msg.textContent=dry.error;return}
+  if(!dry.files){msg.textContent=`Nothing is older than ${n} ${unit}.`;return}
+  if(!confirm(`Delete ${dry.files.toLocaleString()} files (${fmtBytes(dry.bytes)}) older than ${n} ${unit}?`))return;
+  const r=await post({days});
+  msg.textContent=r.error||`Deleted ${r.files.toLocaleString()} files and freed ${fmtBytes(r.bytes)}.`;
+  loadUsage();
+};
+
+/* ---------- push ---------- */
+const b64=k=>Uint8Array.from(atob((k+'='.repeat((4-k.length%4)%4)).replace(/-/g,'+').replace(/_/g,'/')),c=>c.charCodeAt(0));
+const pushOk='serviceWorker' in navigator&&'PushManager' in window&&window.isSecureContext;
+async function pushState(){
+  if(!pushOk)return;
+  const sub=await (await navigator.serviceWorker.ready).pushManager.getSubscription();
+  $('pushsw').checked=!!sub&&Notification.permission==='granted';
+}
+$('pushsw').onchange=async e=>{
+  try{
+    const reg=await navigator.serviceWorker.ready,sub=await reg.pushManager.getSubscription();
+    if(e.target.checked){
+      if(await Notification.requestPermission()!=='granted')throw new Error('Notifications are blocked for this site.');
+      const {key}=await (await fetch('/api/push/key')).json();
+      const s=sub||await reg.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:b64(key)});
+      await fetch('/api/push/subscribe',{method:'POST',headers:J,body:JSON.stringify(s)});
+    }else if(sub){
+      await fetch('/api/push/unsubscribe',{method:'POST',headers:J,body:JSON.stringify({endpoint:sub.endpoint})});
+      await sub.unsubscribe();
+    }
+  }catch(err){alert(err.message)}
+  pushState();
+};
+if(pushOk)navigator.serviceWorker.register('/sw.js').then(pushState);
+else{$('pushsw').disabled=true;$('pushnote').textContent='Needs HTTPS and the installed app (on iPhone: Add to Home Screen first).'}
+
+/* ---------- start ---------- */
+show(location.hash.slice(1));
+load();loadAlerts();fetch('/api/settings').then(r=>r.json()).then(s=>{S=s;$('awaypill').hidden=!s.away});
+setInterval(()=>{load();loadAlerts();if(tab==='logs')loadLogs();
+  if(++tick%3===0&&tab==='cameras'&&!document.hidden)cards.forEach((_,id)=>refreshLight(id))},10000);
+</script>
+</body>
+</html>

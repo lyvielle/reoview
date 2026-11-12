@@ -1,0 +1,31 @@
+# runtime data (cameras, credentials, alerts, push keys, subscriptions)
+data/
+*.pem
+*.key
+cameras.json
+subscriptions.json
+settings.json
+alerts.json
+detections.json
+vapid_private.pem
+
+# secrets
+.env
+.env.*
+
+# python / caches
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+
+# downloaded at image build time
+static/hls.min.js
+
+# editor / OS
+.vscode/
+.idea/
+.DS_Store
+*.tmp
