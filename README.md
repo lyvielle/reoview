@@ -7,7 +7,7 @@ Self-hosted web UI for local Reolink cameras, built to run as one Docker contain
 ## Features
 
 - Live view of all cameras (RTSP or HTTP-FLV → HLS in the browser), fullscreen modal per camera
-- Cameras are added by IP in the UI; the list is shared by every visitor (no login)
+- Cameras are added and edited (including the protocol, RTSP or HTTP-FLV) by IP in the UI; the list is shared by every visitor (no login). Leaving the password empty when editing keeps the stored one
 - Camera controls: spotlight on/off, siren on/off
 - Webhook receiver for Reolink's default webhook, with filtering by time window, "away from home" mode and detection type (person, animal, vehicle, any)
 - Alerts tab: per alert a snapshot, the live stream and a saved video, with resolve/delete

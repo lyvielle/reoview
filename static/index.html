@@ -190,13 +190,13 @@ details{margin-top:12px;color:var(--muted);font-size:13px}
 <div id="addbar"><button id="add">+ Add camera</button></div>
 
 <dialog id="dlg">
-  <h2>Add camera</h2>
+  <h2 id="dlgt">Add camera</h2>
   <label for="ip">IP address</label><input id="ip" placeholder="192.168.1.50" inputmode="decimal" autocomplete="off">
   <label for="name">Name (optional)</label><input id="name" placeholder="Front door">
   <div class="fr"><div><label for="user">Username</label><input id="user" value="admin" autocomplete="off"></div>
   <div><label for="pw">Password</label><input id="pw" type="password" autocomplete="off"></div></div>
   <label for="stor">Video storage folder (optional)</label><select id="stor"><option value="">None</option></select>
-  <details><summary>Stream settings</summary>
+  <details id="dlgd"><summary>Stream settings</summary>
     <label for="proto">Protocol</label><select id="proto"><option value="rtsp">RTSP</option><option value="flv">HTTP-FLV</option></select>
     <label for="port">Port</label><input id="port" value="554" inputmode="numeric">
     <label for="path">Stream path</label><input id="path" value="h264Preview_01_sub">
@@ -272,10 +272,11 @@ const playCard=id=>{const k=cards.get(id);attach(`/hls/${id}/index.m3u8`,k.video
 function pauseCard(k){stopVideo(k.video);k.dot.classList.remove('live')}
 function addCard(c){
   const el=document.createElement('div');el.className='card';
-  el.innerHTML=`<video muted autoplay playsinline></video><div class="bar"><div><div class="name"><span class="dot"></span>${esc(c.name)}</div><div class="ip">${esc(c.ip)}</div></div><button class="ghost">Remove</button></div><div class="ctl"><button class="soft lt" disabled title="Light" aria-label="Light">${ICON_LIGHT}</button><button class="soft sr" title="Siren" aria-label="Siren">${ICON_SIREN}</button></div>`;
+  el.innerHTML=`<video muted autoplay playsinline></video><div class="bar"><div><div class="name"><span class="dot"></span>${esc(c.name)}</div><div class="ip">${esc(c.ip)}</div></div><div><button class="ghost ed">Edit</button><button class="ghost rm">Remove</button></div></div><div class="ctl"><button class="soft lt" disabled title="Light" aria-label="Light">${ICON_LIGHT}</button><button class="soft sr" title="Siren" aria-label="Siren">${ICON_SIREN}</button></div>`;
   const video=el.querySelector('video');
   video.onclick=()=>{$('vt').textContent=c.name;attach(`/hls/${c.id}/index.m3u8`,vv,document.createElement('span'),()=>view.open);view.showModal()};
-  el.querySelector('.ghost').onclick=async()=>{if(confirm(`Remove ${c.name}?`)){await fetch(`/api/cameras/${c.id}`,{method:'DELETE'});load()}};
+  el.querySelector('.ed').onclick=()=>openDlg(c);
+  el.querySelector('.rm').onclick=async()=>{if(confirm(`Remove ${c.name}?`)){await fetch(`/api/cameras/${c.id}`,{method:'DELETE'});load()}};
   const k={el,video,dot:el.querySelector('.dot'),lt:el.querySelector('.lt'),sr:el.querySelector('.sr'),siren:false};
   k.lt.onclick=()=>{if(!k.lt.classList.contains('busy'))setLight(c.id,k,!k.lt.classList.contains('on'))};
   k.sr.onclick=async()=>{
@@ -320,19 +321,27 @@ async function load(){
   for(const c of cams)if(!cards.has(c.id))addCard(c);
   $('empty').hidden=cams.length>0;
 }
-$('add').onclick=async()=>{
-  $('err').textContent='';
+let editing=null;
+async function openDlg(c){
+  editing=c||null;$('err').textContent='';
+  $('dlgt').textContent=c?'Edit camera':'Add camera';$('save').textContent=c?'Save':'Add camera';
   try{const dirs=await (await fetch('/api/storage')).json();
     $('stor').innerHTML='<option value="">None</option>'+dirs.map(d=>`<option>${esc(d)}</option>`).join('')}catch{}
+  if(c){$('ip').value=c.ip;$('name').value=c.name;$('user').value=c.user;$('pw').value='';$('pw').placeholder='unchanged';
+    $('proto').value=c.proto;$('port').value=c.port;$('path').value=c.path;$('stor').value=c.storage||'';$('dlgd').open=false}
+  else{$('ip').value=$('name').value=$('pw').value='';$('pw').placeholder='';$('user').value='admin';
+    $('proto').value='rtsp';$('port').value='554';$('path').value='h264Preview_01_sub';$('stor').value=''}
   $('dlg').showModal();$('ip').focus();
-};
+}
+$('add').onclick=()=>openDlg();
 $('proto').onchange=()=>{const f=$('proto').value==='flv';$('port').value=f?'80':'554';$('path').value=f?'channel0_sub.bcs':'h264Preview_01_sub'};
 $('cancel').onclick=()=>$('dlg').close();
 $('save').onclick=async()=>{
-  const r=await fetch('/api/cameras',{method:'POST',headers:J,body:JSON.stringify({
-    ip:$('ip').value,name:$('name').value,user:$('user').value,password:$('pw').value,proto:$('proto').value,port:$('port').value,path:$('path').value,storage:$('stor').value})});
-  if(!r.ok){$('err').textContent=(await r.json()).error||'Could not add camera';return}
-  $('dlg').close();$('ip').value=$('name').value=$('pw').value='';load();
+  const body=JSON.stringify({ip:$('ip').value,name:$('name').value,user:$('user').value,password:$('pw').value,proto:$('proto').value,port:$('port').value,path:$('path').value,storage:$('stor').value});
+  const r=await fetch(editing?`/api/cameras/${editing.id}`:'/api/cameras',{method:editing?'PUT':'POST',headers:J,body});
+  if(!r.ok){$('err').textContent=(await r.json()).error||'Could not save camera';return}
+  if(editing){const k=cards.get(editing.id);if(k){pauseCard(k);k.el.remove();cards.delete(editing.id)}}
+  $('dlg').close();$('pw').value='';load();
 };
 
 /* ---------- alerts ---------- */

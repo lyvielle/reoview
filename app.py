@@ -827,7 +827,8 @@ def monitor():
 
 
 def public(cam):
-    return {**{k: cam[k] for k in ("id", "name", "ip")}, "storage": cam.get("storage", "")}
+    return {**{k: cam[k] for k in ("id", "name", "ip", "port", "user", "path")},
+            "proto": cam.get("proto", "rtsp"), "storage": cam.get("storage", "")}
 
 
 @app.get("/")
@@ -882,6 +883,37 @@ def add_camera():
         save()
         start(cam)
     return jsonify(public(cam)), 201
+
+
+@app.put("/api/cameras/<cid>")
+def edit_camera(cid):
+    j = request.get_json(force=True, silent=True) or {}
+    cam = get_cam(cid)
+    try:
+        ip = str(ipaddress.ip_address(str(j.get("ip", "")).strip()))
+    except ValueError:
+        return jsonify(error="Invalid IP address"), 400
+    storage = (j.get("storage") or "").strip()
+    if storage and storage not in list_storage():
+        return jsonify(error="Storage folder not found"), 400
+    proto = "flv" if j.get("proto") == "flv" else "rtsp"
+    with lock:
+        cam.update({
+            "name": (j.get("name") or "").strip()[:40] or cam["name"],
+            "ip": ip,
+            "proto": proto,
+            "port": int(j.get("port") or (80 if proto == "flv" else 554)),
+            "user": (j.get("user") or "").strip(),
+            "path": (j.get("path") or ("channel0_sub.bcs" if proto == "flv" else "h264Preview_01_sub")).strip().lstrip("/"),
+            "storage": storage,
+        })
+        if j.get("password"):  # empty = keep the stored password
+            cam["password"] = j["password"]
+        save()
+        tokens.pop(cid, None)
+        backoff.pop(cid, None)
+        start(cam)
+    return jsonify(public(cam))
 
 
 @app.delete("/api/cameras/<cid>")
