@@ -197,6 +197,7 @@ details{margin-top:12px;color:var(--muted);font-size:13px}
   <div><label for="pw">Password</label><input id="pw" type="password" autocomplete="off"></div></div>
   <label for="stor">Video storage folder (optional)</label><select id="stor"><option value="">None</option></select>
   <details><summary>Stream settings</summary>
+    <label for="proto">Protocol</label><select id="proto"><option value="rtsp">RTSP</option><option value="flv">HTTP-FLV</option></select>
     <label for="port">Port</label><input id="port" value="554" inputmode="numeric">
     <label for="path">Stream path</label><input id="path" value="h264Preview_01_sub">
   </details>
@@ -325,10 +326,11 @@ $('add').onclick=async()=>{
     $('stor').innerHTML='<option value="">None</option>'+dirs.map(d=>`<option>${esc(d)}</option>`).join('')}catch{}
   $('dlg').showModal();$('ip').focus();
 };
+$('proto').onchange=()=>{const f=$('proto').value==='flv';$('port').value=f?'80':'554';$('path').value=f?'channel0_sub.bcs':'h264Preview_01_sub'};
 $('cancel').onclick=()=>$('dlg').close();
 $('save').onclick=async()=>{
   const r=await fetch('/api/cameras',{method:'POST',headers:J,body:JSON.stringify({
-    ip:$('ip').value,name:$('name').value,user:$('user').value,password:$('pw').value,port:$('port').value,path:$('path').value,storage:$('stor').value})});
+    ip:$('ip').value,name:$('name').value,user:$('user').value,password:$('pw').value,proto:$('proto').value,port:$('port').value,path:$('path').value,storage:$('stor').value})});
   if(!r.ok){$('err').textContent=(await r.json()).error||'Could not add camera';return}
   $('dlg').close();$('ip').value=$('name').value=$('pw').value='';load();
 };

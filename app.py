@@ -1,4 +1,4 @@
-import atexit, base64, ipaddress, json, os, re, shutil, subprocess, threading, time, urllib.request, uuid
+import atexit, base64, ipaddress, json, os, re, shutil, socket, subprocess, threading, time, urllib.request, uuid
 from datetime import datetime
 from urllib.parse import quote, urlencode
 
@@ -36,6 +36,11 @@ MAX_BYTES = int(float(os.environ.get("REOVIEW_MAX_ALERT_GB", "3")) * 1024 ** 3)
 SNAP_TYPE = os.environ.get("REOVIEW_SNAP_TYPE", "sub")  # "sub" (fast, low-res) or "main" (full quality)
 VIDEO_WAIT = int(os.environ.get("REOVIEW_VIDEO_WAIT_S", "300"))
 VIDEO_SETTLE = int(os.environ.get("REOVIEW_VIDEO_SETTLE_S", "10"))
+AUTO_REBOOT = os.environ.get("REOVIEW_AUTO_REBOOT", "0") == "1"  # reboot a camera whose RTSP stays refused while its HTTP API answers
+REBOOT_AFTER = int(os.environ.get("REOVIEW_REBOOT_AFTER", "5"))  # consecutive failed restarts before a reboot
+REBOOT_COOLDOWN = int(os.environ.get("REOVIEW_REBOOT_COOLDOWN_MIN", "60")) * 60
+closing = False
+last_reboot = {}
 tokens = {}  # cam id -> (token, expires)
 api_locks = {}  # cam id -> lock serialising calls to that camera
 backoff = {}  # cam id -> (failures, not_before)
@@ -709,33 +714,90 @@ def stop(cid):
             entry[0].kill()
 
 
+def stream_url(cam):
+    user, pw = cam["user"], cam["password"]
+    if cam.get("proto") == "flv":
+        q = "&".join(f"{k}={quote(str(v), safe='')}" for k, v in
+                     (("port", 1935), ("app", "bcs"), ("stream", cam["path"]), ("user", user), ("password", pw)))
+        host = cam["ip"] + (f':{cam["port"]}' if int(cam["port"]) != 80 else "")
+        return f"http://{host}/flv?{q}"
+    auth = f'{quote(user, safe="")}:{quote(pw, safe="")}@' if user else ""
+    return f'rtsp://{auth}{cam["ip"]}:{cam["port"]}/{cam["path"]}'
+
+
+def pump_stderr(proc, secrets):
+    """Forward ffmpeg's error output to the log with the camera password masked."""
+    for raw in proc.stderr:
+        line = raw.decode(errors="replace").rstrip()
+        for x in secrets:
+            line = line.replace(x, "***")
+        if line:
+            print(f"[ffmpeg] {line}", flush=True)
+
+
 def start(cam):
+    if closing:
+        return
     stop(cam["id"])
     d = os.path.join(HLS, cam["id"])
     shutil.rmtree(d, ignore_errors=True)
     os.makedirs(d)
-    auth = ""
-    if cam["user"]:
-        auth = f'{quote(cam["user"], safe="")}:{quote(cam["password"], safe="")}@'
-    url = f'rtsp://{auth}{cam["ip"]}:{cam["port"]}/{cam["path"]}'
+    flv = cam.get("proto") == "flv"
+    url = stream_url(cam)
     if TRANSCODE:
         video = ["-vf", "scale=640:-2,fps=15", "-c:v", "libx264", "-preset", "ultrafast",
                  "-tune", "zerolatency", "-profile:v", "baseline", "-pix_fmt", "yuv420p", "-g", "30"]
     else:
         video = ["-c:v", "copy"]
-    cmd = (["ffmpeg", "-hide_banner", "-loglevel", "error", "-rtsp_transport", "tcp",
-            "-timeout", "10000000", "-use_wallclock_as_timestamps", "1", "-i", url, "-an"] + video +
+    cmd = (["ffmpeg", "-hide_banner", "-loglevel", "error"] + ([] if flv else ["-rtsp_transport", "tcp"]) +
+           ["-timeout", "10000000", "-use_wallclock_as_timestamps", "1", "-i", url, "-an"] + video +
            ["-f", "hls", "-hls_time", "2", "-hls_list_size", "6",
             "-hls_flags", "delete_segments", "-hls_segment_filename", f"{d}/seg%05d.ts",
             f"{d}/index.m3u8"])
-    print(f"[reoview] start {cam['id']} {cam['ip']}:{cam['port']}/{cam['path']} transcode={TRANSCODE}", flush=True)
-    players[cam["id"]] = (subprocess.Popen(cmd), time.time())
+    print(f"[reoview] start {cam['id']} {'flv' if flv else 'rtsp'} {cam['ip']}:{cam['port']}/{cam['path']} transcode={TRANSCODE}", flush=True)
+    proc = subprocess.Popen(cmd, stderr=subprocess.PIPE)
+    pw = cam["password"]
+    secrets = [x for x in {pw, quote(pw, safe=""), quote(pw)} if x]
+    threading.Thread(target=pump_stderr, args=(proc, secrets), daemon=True).start()
+    players[cam["id"]] = (proc, time.time())
+
+
+def port_state(ip, port):
+    try:
+        with socket.create_connection((ip, int(port)), timeout=3):
+            return "open"
+    except ConnectionRefusedError:
+        return "refused"
+    except OSError:
+        return "timeout"
+
+
+def on_failure(cam, fails):
+    """Runs outside the lock: log which camera services answer; optionally reboot the camera."""
+    rtsp_port = cam["port"] if cam.get("proto") != "flv" else 554
+    http, rtsp = port_state(cam["ip"], 80), port_state(cam["ip"], rtsp_port)
+    print(f"[reoview] diag {cam['name']}: failures={fails} http(80)={http} rtsp({rtsp_port})={rtsp}", flush=True)
+    if not (AUTO_REBOOT and fails >= REBOOT_AFTER and http == "open" and rtsp == "refused" and cam.get("user")):
+        return
+    cid = cam["id"]
+    if time.time() - last_reboot.get(cid, 0) < REBOOT_COOLDOWN:
+        return
+    last_reboot[cid] = time.time()
+    print(f"[reoview] rebooting {cam['name']}: RTSP refused, HTTP API reachable", flush=True)
+    try:
+        cam_call(cam, "Reboot", {}, action=0, timeout=10)
+    except Exception as e:
+        print(f"[reoview] reboot request for {cam['name']}: {e}", flush=True)  # the camera may drop the connection
+    tokens.pop(cid, None)
+    backoff[cid] = (0, time.time() + 90)
 
 
 def monitor():
     last_clean = 0
     while True:
         time.sleep(10)
+        if closing:
+            return
         with lock:
             for cam in list(cameras):
                 cid = cam["id"]
@@ -757,6 +819,7 @@ def monitor():
                     why = "stalled" if proc.poll() is None else f"exited ({proc.returncode})"
                     print(f"[reoview] restarting {cam['name']}: {why}", flush=True)
                     start(cam)
+                    threading.Thread(target=on_failure, args=(dict(cam), fails + 1), daemon=True).start()
         if time.time() - last_clean > 600:
             last_clean = time.time()
             cleanup()
@@ -797,15 +860,17 @@ def add_camera():
     user = (j.get("user") or "").strip()
     pw = j.get("password") or ""
     typed = (j.get("name") or "").strip()[:40]
+    proto = "flv" if j.get("proto") == "flv" else "rtsp"
     cam = {
         "id": uuid.uuid4().hex[:8],
         "name": typed or ip,
         "devname": "",
         "ip": ip,
-        "port": int(j.get("port") or 554),
+        "proto": proto,
+        "port": int(j.get("port") or (80 if proto == "flv" else 554)),
         "user": (j.get("user") or "").strip(),
         "password": j.get("password") or "",
-        "path": (j.get("path") or "h264Preview_01_sub").strip().lstrip("/"),
+        "path": (j.get("path") or ("channel0_sub.bcs" if proto == "flv" else "h264Preview_01_sub")).strip().lstrip("/"),
         "storage": storage,
     }
     if user:
@@ -1108,8 +1173,24 @@ def hls(cid, name):
 
 
 def stop_all():
-    for cid in list(players):
-        stop(cid)
+    """Stop all ffmpeg processes in parallel so each one can send its RTSP TEARDOWN before we exit."""
+    global closing
+    closing = True
+    got = lock.acquire(timeout=5)
+    try:
+        procs = [e[0] for e in players.values()]
+        players.clear()
+    finally:
+        if got:
+            lock.release()
+    for p in procs:
+        p.terminate()
+    end = time.time() + 8
+    for p in procs:
+        try:
+            p.wait(max(0.1, end - time.time()))
+        except subprocess.TimeoutExpired:
+            p.kill()
 
 
 atexit.register(stop_all)
