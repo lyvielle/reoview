@@ -10,7 +10,7 @@
 <link rel="apple-touch-icon" href="/static/icon-192.png">
 <style>
 :root{--bg:#f5f6f8;--card:#fff;--ink:#14181f;--muted:#6b7280;--line:#e5e7eb;--accent:#2563eb;--bad:#dc2626;--ok:#16a34a}
-*{box-sizing:border-box}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 body{margin:0;display:flex;min-height:100vh;background:var(--bg);color:var(--ink);font:15px/1.4 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
 button,.btn{font:inherit;cursor:pointer;border:0;border-radius:10px;padding:9px 16px;background:var(--accent);color:#fff;font-weight:600;text-decoration:none;display:inline-block;text-align:center}
 button.soft,.btn.soft{background:#eef0f3;color:var(--ink)}
@@ -19,7 +19,7 @@ button.ghost{background:transparent;color:var(--muted);padding:6px 10px}
 button.ghost:hover{color:var(--bad)}
 button:disabled,.btn[aria-disabled=true]{opacity:.4;cursor:not-allowed;pointer-events:none}
 button:focus-visible,input:focus-visible,select:focus-visible,a:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
-#side{width:232px;flex:none;position:sticky;top:0;height:100vh;background:var(--card);border-right:1px solid var(--line);padding:20px 14px;display:flex;flex-direction:column;gap:20px}
+#side{width:232px;flex:none;position:sticky;top:0;height:100vh;height:100dvh;background:var(--card);border-right:1px solid var(--line);padding:20px 14px calc(20px + env(safe-area-inset-bottom,0px));display:flex;flex-direction:column;gap:20px}
 .brand{display:flex;align-items:center;gap:10px;font-weight:700;font-size:20px;letter-spacing:-.02em;padding:0 8px}
 .brand img{width:28px;height:28px;border-radius:8px}
 nav{display:flex;flex-direction:column;gap:4px}
@@ -45,7 +45,11 @@ h2 small{font-weight:400}
 #grid{grid-template-columns:repeat(auto-fit,minmax(min(100%,560px),1fr))}
 .agrid{grid-template-columns:repeat(auto-fill,minmax(min(100%,260px),1fr))}
 .card,.acard,.panel{background:var(--card);border:1px solid var(--line);border-radius:16px;overflow:hidden;box-shadow:0 1px 2px rgba(20,24,31,.04)}
-.card video{display:block;width:100%;aspect-ratio:16/9;background:#e9ecf1;object-fit:cover;cursor:zoom-in}
+.vbox{position:relative;background:#e9ecf1}
+.card video{display:block;width:100%;aspect-ratio:16/9;object-fit:cover;cursor:zoom-in;opacity:0}
+.card.live video{opacity:1}
+.vbox .spin{position:absolute;top:50%;left:50%;margin:-17px 0 0 -17px;border-color:#d1d5db;border-top-color:var(--accent);pointer-events:none}
+.card.live .vbox .spin{display:none}
 .bar{display:flex;align-items:center;justify-content:space-between;padding:10px 14px}
 .ctl{display:flex;gap:8px;padding:0 14px 12px}.ctl button{flex:none;width:44px;height:38px;padding:0;display:inline-flex;align-items:center;justify-content:center}
 .ctl button.busy{position:relative;pointer-events:none}
@@ -58,7 +62,7 @@ h2 small{font-weight:400}
 #getapp{margin-top:auto}
 .name{font-weight:600}.ip{color:var(--muted);font-size:13px}
 .dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--muted);margin-right:8px}
-.dot.live{background:var(--ok)}
+.card.live .dot{background:var(--ok)}
 .empty{text-align:center;color:var(--muted);padding:60px 16px}
 .acard{cursor:pointer}.acard.done{opacity:.6}
 .thumb{position:relative;aspect-ratio:16/9;background:#e9ecf1;display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:13px}
@@ -239,16 +243,19 @@ const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'
 const fmt=ts=>new Date(ts*1000).toLocaleString([],{dateStyle:'medium',timeStyle:'short'});
 const ICON_LIGHT='<svg viewBox="0 0 24 24"><path d="M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.3h6c0-1 .4-1.8 1-2.3A7 7 0 0 0 12 2z"/></svg>';
 const ICON_SIREN='<svg viewBox="0 0 24 24"><path d="M7 18v-6a5 5 0 1 1 10 0v6M5 21a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-1a2 2 0 0 0-2-2H7a2 2 0 0 0-2 2zM21 12h1M2 12h1M12 2v1M18.5 4.5 18 5M5.5 4.5 6 5"/></svg>';
+const NOPOSTER='data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==';
 const PAGES={cameras:'Camera(s)',alerts:'Alerts',logs:'Logs',settings:'Settings',app:'Get the app'};
 const inApp=/ReoviewApp/.test(navigator.userAgent);  // set by the Android app's WebView
 const TYPES={person:'Person',animal:'Animal',vehicle:'Vehicle',other:'Other'};
 const grid=$('grid'),cards=new Map(),view=$('view'),vv=$('vv'),aview=$('aview'),av=$('av'),aimg=$('aimg');
+av.poster=NOPOSTER;
 let tick=0,tab='cameras',cams=[],alerts=[],lastA='',S=null,cur=null,mode='photo';
 
 /* ---------- HLS ---------- */
 function attach(src,video,dot,alive){
   const retry=()=>{dot.classList.remove('live');setTimeout(()=>alive()&&attach(src,video,dot,alive),3000)};
   if(video._hls){video._hls.destroy();video._hls=null}
+  video.poster=NOPOSTER;  // Android WebView otherwise shows its own stretched placeholder
   if(window.Hls&&Hls.isSupported()){
     const h=new Hls({liveSyncDurationCount:2,liveMaxLatencyDurationCount:5,manifestLoadingMaxRetry:0});
     video._hls=h;h.loadSource(src);h.attachMedia(video);
@@ -268,7 +275,7 @@ function show(t){
   $('title').textContent=PAGES[t];
   $('addbar').hidden=t!=='cameras';
   closeMenu();
-  cards.forEach((k,id)=>{if(t==='cameras'){playCard(id);refreshLight(id)}else pauseCard(k)});
+  cards.forEach((k,id)=>{if(t==='cameras'){if(!k.on)playCard(id);refreshLight(id)}else if(!inApp)pauseCard(k)});  // the app keeps streams alive across tabs
   if(t==='alerts')loadAlerts();
   if(t==='logs')loadLogs();
   if(t==='settings'){loadSettings();loadUsage()}
@@ -280,17 +287,17 @@ $('scrim').onclick=closeMenu;
 window.onhashchange=()=>show(location.hash.slice(1));
 
 /* ---------- cameras ---------- */
-const playCard=id=>{const k=cards.get(id);attach(`/hls/${id}/index.m3u8`,k.video,k.dot,()=>cards.has(id)&&tab==='cameras')};
-function pauseCard(k){stopVideo(k.video);k.dot.classList.remove('live')}
+const playCard=id=>{const k=cards.get(id);k.on=true;attach(`/hls/${id}/index.m3u8`,k.video,k.el,()=>cards.has(id)&&(tab==='cameras'||inApp))};
+function pauseCard(k){k.on=false;stopVideo(k.video);k.el.classList.remove('live')}
 function addCard(c){
   const el=document.createElement('div');el.className='card';
-  el.innerHTML=`<video muted autoplay playsinline></video><div class="bar"><div><div class="name"><span class="dot"></span>${esc(c.name)}</div><div class="ip">${esc(c.ip)}</div></div><div><button class="ghost mv" data-d="left" title="Move left" aria-label="Move left"><svg viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6"/></svg></button><button class="ghost mv" data-d="right" title="Move right" aria-label="Move right"><svg viewBox="0 0 24 24"><path d="M9 18l6-6-6-6"/></svg></button><button class="ghost ed">Edit</button><button class="ghost rm">Remove</button></div></div><div class="ctl"><button class="soft lt" disabled title="Light" aria-label="Light">${ICON_LIGHT}</button><button class="soft sr" title="Siren" aria-label="Siren">${ICON_SIREN}</button></div>`;
+  el.innerHTML=`<div class="vbox"><video muted autoplay playsinline></video><div class="spin"></div></div><div class="bar"><div><div class="name"><span class="dot"></span>${esc(c.name)}</div><div class="ip">${esc(c.ip)}</div></div><div><button class="ghost mv" data-d="left" title="Move left" aria-label="Move left"><svg viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6"/></svg></button><button class="ghost mv" data-d="right" title="Move right" aria-label="Move right"><svg viewBox="0 0 24 24"><path d="M9 18l6-6-6-6"/></svg></button><button class="ghost ed">Edit</button><button class="ghost rm">Remove</button></div></div><div class="ctl"><button class="soft lt" disabled title="Light" aria-label="Light">${ICON_LIGHT}</button><button class="soft sr" title="Siren" aria-label="Siren">${ICON_SIREN}</button></div>`;
   const video=el.querySelector('video');
   video.onclick=()=>{$('vt').textContent=c.name;attach(`/hls/${c.id}/index.m3u8`,vv,document.createElement('span'),()=>view.open);view.showModal()};
   el.querySelector('.ed').onclick=()=>openDlg(c);
   el.querySelectorAll('.mv').forEach(b=>b.onclick=async()=>{await fetch(`/api/cameras/${c.id}/move`,{method:'POST',headers:J,body:JSON.stringify({dir:b.dataset.d})});load()});
   el.querySelector('.rm').onclick=async()=>{if(confirm(`Remove ${c.name}?`)){await fetch(`/api/cameras/${c.id}`,{method:'DELETE'});load()}};
-  const k={el,video,dot:el.querySelector('.dot'),lt:el.querySelector('.lt'),sr:el.querySelector('.sr'),siren:false};
+  const k={el,video,lt:el.querySelector('.lt'),sr:el.querySelector('.sr'),siren:false};
   k.lt.onclick=()=>{if(!k.lt.classList.contains('busy'))setLight(c.id,k,!k.lt.classList.contains('on'))};
   k.sr.onclick=async()=>{
     if(k.sr.classList.contains('busy')||(!k.siren&&!confirm(`Sound the siren on ${c.name}?`)))return;
