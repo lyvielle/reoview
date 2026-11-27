@@ -26,6 +26,8 @@ services:
       REOVIEW_AUTO_REBOOT: "${REOVIEW_AUTO_REBOOT:-0}"            # 1 = reboot a camera whose RTSP stays refused while its HTTP API answers
       REOVIEW_REBOOT_AFTER: "${REOVIEW_REBOOT_AFTER:-5}"          # consecutive failed restarts before a reboot
       REOVIEW_REBOOT_COOLDOWN_MIN: "${REOVIEW_REBOOT_COOLDOWN_MIN:-60}"
+      REOVIEW_APK_REPO: "${REOVIEW_APK_REPO:-lyvielle/reoview}"       # GitHub repo whose releases provide the Android app
+      REOVIEW_APK_CHECK_H: "${REOVIEW_APK_CHECK_H:-6}"            # hours between release checks, 0 = off
     volumes:
       - ${DATA_DIR:-./data}:/data
       - ${STORAGE_DIR:-/media/reolink}:/storage

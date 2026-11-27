@@ -2,15 +2,16 @@
 
 # Reoview
 
-Self-hosted web UI for local Reolink cameras, built to run as one Docker container on a Raspberry Pi. It shows all camera streams on one page (desktop and mobile), turns camera webhooks into filtered alerts with photo and video, and sends push notifications to a PWA.
+Self-hosted web UI for local Reolink cameras, built to run as one Docker container on a Raspberry Pi. It shows all camera streams on one page (desktop and mobile), turns camera webhooks into filtered alerts with photo and video, and sends push notifications to an Android app (Firebase Cloud Messaging) or a PWA.
 
 ## Features
 
 - Live view of all cameras (RTSP or HTTP-FLV → HLS in the browser), fullscreen modal per camera
 - Cameras are added and edited (including the protocol, RTSP or HTTP-FLV) by IP in the UI; the list is shared by every visitor (no login). Leaving the password empty when editing keeps the stored one
-- Camera controls: spotlight on/off, siren on/off
+- Camera controls: spotlight on/off, siren on/off, move left/right to change the camera order (saved for everyone)
 - Webhook receiver for Reolink's default webhook, with filtering by time window, "away from home" mode and detection type (person, animal, vehicle, any)
 - Alerts tab: per alert a snapshot, the live stream and a saved video, with resolve/delete
+- Android app (APK) with push notifications through Firebase Cloud Messaging; the server can download new app releases from GitHub and offer them on its "Get the app" page
 - Push notifications (Web Push / VAPID) to the installed PWA
 - Storage management for the camera FTP folder (age-based deletion, free-space guard, one-time prune)
 - Logs tab: last 100 reported detections, with a "Find video" search for any entry
@@ -40,6 +41,10 @@ Camera ──FTP──► (external FTP server) ──► /storage (mounted) ─
 
 **Storage management.** Optional age-based deletion and a free-space guard (deletes oldest files first, never files modified in the last 10 minutes), run every 10 minutes and on settings save, plus a one-time prune that shows a count before deleting. Only `.mp4 .mov .avi .mkv .jpg .jpeg .png` are touched. This needs the storage mount to be writable.
 
+**Android app.** `android/` is a small Kotlin app: one WebView showing the Reoview server (address entered on first start, asked again when the page cannot load), a Firebase messaging service and a download handler that hands file downloads (videos, photos, APKs) to Android's download manager, saving them in Downloads. Video fullscreen and the back button work. On start the app registers its FCM token with `POST /api/fcm/register`; tokens are stored in `fcm_tokens.json` and removed when FCM reports them as unregistered. Each alert is sent to every token as a high-priority data message, and the app shows it as a notification that opens the Alerts tab. FCM is used only if `DATA_DIR/fcm-service-account.json` (a Firebase service-account key) exists; web push keeps working alongside. The web UI recognises the app by `ReoviewApp/<version>` in the user agent and hides the PWA notification switch and the "Get the app" button there. Requires Android 10 or newer.
+
+**App releases.** The workflow `.github/workflows/android.yml` runs on every push to `main` that changes `android/` (or by hand from the Actions tab). It builds a signed APK and creates a GitHub release `v<version>` with the asset `reoview-<version>.apk`. The version is `<major.minor from android/VERSION>.<workflow run number>`, the run number is also the Android `versionCode`, so every build is newer than the last. Bump `android/VERSION` for bigger changes. The server checks the latest release of `REOVIEW_APK_REPO` every `REOVIEW_APK_CHECK_H` hours, downloads a newer APK to `DATA_DIR/apk/` (the previous one is deleted) and serves it on the "Get the app" page (`/download/app`). An APK named `reoview-<version>.apk` that you place in that folder yourself is offered too.
+
 **Push.** A VAPID key pair is generated on first start (`DATA_DIR/vapid_private.pem`). Each device subscribes from Settings; subscriptions are stored in `subscriptions.json` and removed when the push service reports 404/410. Pushes are sent with urgency high and a 1 h TTL. Browsers require HTTPS (or localhost) for service workers and push; on iOS the app must be added to the Home Screen.
 
 ## Deployment
@@ -53,11 +58,19 @@ cd reoview
 docker compose up -d --build
 ```
 
-Open `http://<host>:8000`, add cameras with the button at the bottom, and set up notifications under Settings.
+Open `http://<host>:8000`, add cameras with the button at the bottom, and set up notifications under Settings, or install the Android app from "Get the app" in the sidebar.
 
 **Camera setup.** In each camera's web UI, enable RTSP and set Push → Webhook to `http://<host-lan-ip>:8000/api/webhook` (content: Default). Alerts are matched by the sender IP, so the camera must post directly to the container, not through a reverse proxy. Videos come from the camera's FTP uploads: run an FTP server on the host that stores into the folder you mount at `/storage` (one subfolder per camera), then pick that subfolder when adding the camera. The FTP server is not part of this project.
 
 **HTTPS / PWA.** Installing the PWA and push need HTTPS. Plain HTTP works for viewing only. One option is `tailscale serve` in front of port 8000 (own HTTPS port) while the camera webhook keeps using the LAN HTTP address.
+
+**Firebase (Android push).** One-time setup:
+
+1. In the [Firebase console](https://console.firebase.google.com) create a project (Analytics not needed), then add an Android app with package name `io.github.lyvielle.reoview`.
+2. Download its `google-services.json` and store the file's content as the repository secret `GOOGLE_SERVICES_JSON` (`gh secret set GOOGLE_SERVICES_JSON < google-services.json`).
+3. In Project settings → Service accounts, generate a new private key and save it on the server as `DATA_DIR/fcm-service-account.json`. Keep it private: it can send messages to every app install.
+
+**Signing.** Release APKs are signed with one key so that updates install over the previous version. The workflow reads it from the secrets `ANDROID_KEYSTORE_BASE64` (the PKCS12 keystore, base64) and `ANDROID_KEYSTORE_PASSWORD` (store and key password, alias `reoview`). Keep a backup of the keystore: if it is lost, the app has to be uninstalled before a build signed with a new key can be installed.
 
 ## Configuration
 
@@ -82,6 +95,8 @@ Set as environment variables when running Compose (or edit the defaults in `dock
 | `REOVIEW_AUTO_REBOOT` | `0` | `1` reboots a camera whose RTSP is refused while its HTTP API answers |
 | `REOVIEW_REBOOT_AFTER` | `5` | Consecutive failed restarts before such a reboot |
 | `REOVIEW_REBOOT_COOLDOWN_MIN` | `60` | Minimum minutes between reboots of one camera |
+| `REOVIEW_APK_REPO` | `lyvielle/reoview` | GitHub repository whose latest release provides the APK |
+| `REOVIEW_APK_CHECK_H` | `6` | Hours between checks for a new APK release; `0` turns it off |
 | `REOVIEW_PORT` | `8000` | Host port (Compose only) |
 | `REOVIEW_STOP_GRACE` | `30s` | Compose `stop_grace_period` (Compose only) |
 | `DATA_DIR` | `./data` | Host folder mounted at `/data` (Compose only; the container path stays `/data`) |
@@ -100,9 +115,12 @@ static/icon-*.png           PWA / favicon icons
 Dockerfile                  Image (Debian bookworm, ffmpeg, gunicorn)
 docker-compose.yml          Service, env vars, volumes, tmpfs
 requirements.txt            pywebpush, py-vapid, http-ece (installed with --no-deps)
+tests/test_app.py           Server tests (reorder, FCM, APK download); run in the image, see the file header
+android/                    Android app (Kotlin, Gradle); VERSION holds major.minor
+.github/workflows/android.yml  Builds, signs and releases the APK
 ```
 
-`DATA_DIR` contents at runtime: `cameras.json`, `settings.json`, `alerts.json`, `detections.json`, `subscriptions.json`, `vapid_private.pem`, `alerts/`, `find/`.
+`DATA_DIR` contents at runtime: `cameras.json`, `settings.json`, `alerts.json`, `detections.json`, `subscriptions.json`, `vapid_private.pem`, `fcm_tokens.json`, `fcm-service-account.json` (you add it), `alerts/`, `find/`, `apk/`.
 
 ## Security notes
 
@@ -112,6 +130,8 @@ requirements.txt            pywebpush, py-vapid, http-ece (installed with --no-d
 - **The webhook secret is optional** and empty by default; without it anyone on the network can post fake alerts (they only affect cameras that were added). The secret is masked in logs, but the rest of each webhook payload is logged.
 - The `/storage` mount is writable and Reoview can delete files in it (storage management, and only the image/video extensions listed above).
 - The IP field accepts any valid IP address, not just private ranges, and Reoview will send camera API requests to it.
+- Anyone who can reach the server can register an FCM token and then receive alert notifications (camera name and detection type), like web push subscriptions.
+- The Android app allows plain HTTP (LAN use) and keeps no credentials; it has the same access as the browser.
 - The VAPID private key in `DATA_DIR` allows sending pushes to subscribed devices. Keep it out of version control (it is in `.gitignore`).
 
 ## Limitations
@@ -121,5 +141,6 @@ requirements.txt            pywebpush, py-vapid, http-ece (installed with --no-d
 - The siren command (`AudioAlarmPlay`) is implemented from documentation and has not been tested on a real camera. The siren state cannot be read back, so the button only reflects what was pressed in Reoview.
 - Single process and single worker; state lives in memory and in JSON files, so it does not scale horizontally.
 - Transcoding is CPU-heavy on a Pi; the default is to copy streams. Converting wide (e.g. 4608px) clips for playback can take minutes.
-- No automated tests. Behaviour was checked by hand and with ad-hoc scripts against a fake camera and generated media files.
+- Few automated tests (`tests/`, server only). Most behaviour was checked by hand and with ad-hoc scripts against a fake camera and generated media files. The Android app was build-tested but not yet run against a real Firebase project at the time it was added.
+- A converted "Find video" copy is deleted when its window closes; in the Android app, wait for the download to finish before closing it.
 - Settings, camera list and alerts are global; there are no users or per-user preferences (push subscriptions are per device).

@@ -54,6 +54,8 @@ h2 small{font-weight:400}
 @keyframes spin{to{transform:rotate(360deg)}}
 .ctl svg{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
 .ctl button.on{background:#fef3c7;color:#92400e}.ctl button.alarm{background:var(--bad);color:#fff}
+.bar button.mv{padding:6px;display:inline-flex}.bar svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+#getapp{margin-top:auto}
 .name{font-weight:600}.ip{color:var(--muted);font-size:13px}
 .dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--muted);margin-right:8px}
 .dot.live{background:var(--ok)}
@@ -138,6 +140,7 @@ details{margin-top:12px;color:var(--muted);font-size:13px}
     <a href="#logs" data-tab="logs"><svg viewBox="0 0 24 24"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg>Logs</a>
     <a href="#settings" data-tab="settings"><svg viewBox="0 0 24 24"><path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6"/></svg>Settings</a>
   </nav>
+  <nav id="getapp"><a href="#app" data-tab="app"><svg viewBox="0 0 24 24"><rect x="5" y="2" width="14" height="20" rx="2"/><path d="M12 8v7M9 12l3 3 3-3M11 18h2"/></svg>Get the app</a></nav>
 </aside>
 <div id="scrim"></div>
 
@@ -182,6 +185,13 @@ details{margin-top:12px;color:var(--muted);font-size:13px}
         <div class="row"><label for="t-person">Person</label><input type="checkbox" role="switch" id="t-person"></div>
         <div class="row"><label for="t-animal">Animal</label><input type="checkbox" role="switch" id="t-animal"></div>
         <div class="row"><label for="t-vehicle">Vehicle</label><input type="checkbox" role="switch" id="t-vehicle"></div>
+      </div>
+    </section>
+    <section id="p-app" hidden>
+      <div class="panel"><h2>Reoview for Android</h2>
+        <p class="hint" id="appinfo">Checking…</p>
+        <div class="actions"><a class="btn" id="appdl" href="/download/app" hidden>Download APK</a></div>
+        <p class="hint">Open the downloaded file on your phone to install it. Android asks once to allow installing apps from your browser. On first start the app asks for the server address: <b id="appurl"></b></p>
       </div>
     </section>
   </main>
@@ -229,7 +239,8 @@ const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'
 const fmt=ts=>new Date(ts*1000).toLocaleString([],{dateStyle:'medium',timeStyle:'short'});
 const ICON_LIGHT='<svg viewBox="0 0 24 24"><path d="M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.3h6c0-1 .4-1.8 1-2.3A7 7 0 0 0 12 2z"/></svg>';
 const ICON_SIREN='<svg viewBox="0 0 24 24"><path d="M7 18v-6a5 5 0 1 1 10 0v6M5 21a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-1a2 2 0 0 0-2-2H7a2 2 0 0 0-2 2zM21 12h1M2 12h1M12 2v1M18.5 4.5 18 5M5.5 4.5 6 5"/></svg>';
-const PAGES={cameras:'Camera(s)',alerts:'Alerts',logs:'Logs',settings:'Settings'};
+const PAGES={cameras:'Camera(s)',alerts:'Alerts',logs:'Logs',settings:'Settings',app:'Get the app'};
+const inApp=/ReoviewApp/.test(navigator.userAgent);  // set by the Android app's WebView
 const TYPES={person:'Person',animal:'Animal',vehicle:'Vehicle',other:'Other'};
 const grid=$('grid'),cards=new Map(),view=$('view'),vv=$('vv'),aview=$('aview'),av=$('av'),aimg=$('aimg');
 let tick=0,tab='cameras',cams=[],alerts=[],lastA='',S=null,cur=null,mode='photo';
@@ -261,6 +272,7 @@ function show(t){
   if(t==='alerts')loadAlerts();
   if(t==='logs')loadLogs();
   if(t==='settings'){loadSettings();loadUsage()}
+  if(t==='app')loadApp();
 }
 const closeMenu=()=>{$('side').classList.remove('open');$('scrim').classList.remove('open')};
 $('menu').onclick=()=>{$('side').classList.add('open');$('scrim').classList.add('open')};
@@ -272,10 +284,11 @@ const playCard=id=>{const k=cards.get(id);attach(`/hls/${id}/index.m3u8`,k.video
 function pauseCard(k){stopVideo(k.video);k.dot.classList.remove('live')}
 function addCard(c){
   const el=document.createElement('div');el.className='card';
-  el.innerHTML=`<video muted autoplay playsinline></video><div class="bar"><div><div class="name"><span class="dot"></span>${esc(c.name)}</div><div class="ip">${esc(c.ip)}</div></div><div><button class="ghost ed">Edit</button><button class="ghost rm">Remove</button></div></div><div class="ctl"><button class="soft lt" disabled title="Light" aria-label="Light">${ICON_LIGHT}</button><button class="soft sr" title="Siren" aria-label="Siren">${ICON_SIREN}</button></div>`;
+  el.innerHTML=`<video muted autoplay playsinline></video><div class="bar"><div><div class="name"><span class="dot"></span>${esc(c.name)}</div><div class="ip">${esc(c.ip)}</div></div><div><button class="ghost mv" data-d="left" title="Move left" aria-label="Move left"><svg viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6"/></svg></button><button class="ghost mv" data-d="right" title="Move right" aria-label="Move right"><svg viewBox="0 0 24 24"><path d="M9 18l6-6-6-6"/></svg></button><button class="ghost ed">Edit</button><button class="ghost rm">Remove</button></div></div><div class="ctl"><button class="soft lt" disabled title="Light" aria-label="Light">${ICON_LIGHT}</button><button class="soft sr" title="Siren" aria-label="Siren">${ICON_SIREN}</button></div>`;
   const video=el.querySelector('video');
   video.onclick=()=>{$('vt').textContent=c.name;attach(`/hls/${c.id}/index.m3u8`,vv,document.createElement('span'),()=>view.open);view.showModal()};
   el.querySelector('.ed').onclick=()=>openDlg(c);
+  el.querySelectorAll('.mv').forEach(b=>b.onclick=async()=>{await fetch(`/api/cameras/${c.id}/move`,{method:'POST',headers:J,body:JSON.stringify({dir:b.dataset.d})});load()});
   el.querySelector('.rm').onclick=async()=>{if(confirm(`Remove ${c.name}?`)){await fetch(`/api/cameras/${c.id}`,{method:'DELETE'});load()}};
   const k={el,video,dot:el.querySelector('.dot'),lt:el.querySelector('.lt'),sr:el.querySelector('.sr'),siren:false};
   k.lt.onclick=()=>{if(!k.lt.classList.contains('busy'))setLight(c.id,k,!k.lt.classList.contains('on'))};
@@ -319,6 +332,9 @@ async function load(){
   const ids=new Set(cams.map(c=>c.id));
   for(const [id,k] of cards)if(!ids.has(id)){pauseCard(k);k.el.remove();cards.delete(id)}
   for(const c of cams)if(!cards.has(c.id))addCard(c);
+  cams.forEach((c,i)=>{const k=cards.get(c.id);
+    if(grid.children[i]!==k.el){grid.insertBefore(k.el,grid.children[i]);k.video.play().catch(()=>{})}
+    k.el.querySelector('[data-d=left]').disabled=!i;k.el.querySelector('[data-d=right]').disabled=i===cams.length-1});
   $('empty').hidden=cams.length>0;
 }
 let editing=null;
@@ -496,6 +512,17 @@ $('pr-go').onclick=async()=>{
   loadUsage();
 };
 
+/* ---------- get the app ---------- */
+async function loadApp(){
+  $('appurl').textContent=location.origin;
+  try{
+    const a=await (await fetch('/api/app')).json();
+    $('appinfo').textContent=a.version?`Version ${a.version} · ${fmtBytes(a.size)} · ${fmt(a.ts)}`:'No app version has been downloaded to this server yet.';
+    $('appdl').hidden=!a.version;
+  }catch{$('appinfo').textContent='Could not reach the server.'}
+}
+$('getapp').hidden=inApp;
+
 /* ---------- push ---------- */
 const b64=k=>Uint8Array.from(atob((k+'='.repeat((4-k.length%4)%4)).replace(/-/g,'+').replace(/_/g,'/')),c=>c.charCodeAt(0));
 const pushOk='serviceWorker' in navigator&&'PushManager' in window&&window.isSecureContext;
@@ -519,7 +546,8 @@ $('pushsw').onchange=async e=>{
   }catch(err){alert(err.message)}
   pushState();
 };
-if(pushOk)navigator.serviceWorker.register('/sw.js').then(pushState);
+if(inApp){$('pushsw').hidden=true;$('pushnote').textContent='Sent by the Android app. Turn them off in the Android app settings.'}
+else if(pushOk)navigator.serviceWorker.register('/sw.js').then(pushState);
 else{$('pushsw').disabled=true;$('pushnote').textContent='Needs HTTPS and the installed app (on iPhone: Add to Home Screen first).'}
 
 /* ---------- start ---------- */

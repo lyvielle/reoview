@@ -29,3 +29,17 @@ static/hls.min.js
 .idea/
 .DS_Store
 *.tmp
+
+# firebase / android signing (never commit)
+fcm-service-account.json
+fcm_tokens.json
+google-services.json
+*.jks
+*.keystore
+
+# android build output
+android/.gradle/
+android/build/
+android/app/build/
+android/local.properties
+.kotlin/

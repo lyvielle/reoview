@@ -5,7 +5,7 @@ self.addEventListener('activate', e => e.waitUntil(
   caches.keys().then(k => Promise.all(k.filter(n => n !== CACHE).map(n => caches.delete(n))))));
 self.addEventListener('fetch', e => {
   const u = new URL(e.request.url);
-  if (e.request.method !== 'GET' || u.pathname.startsWith('/api/') || u.pathname.startsWith('/hls/') || u.pathname.startsWith('/alerts/')) return;
+  if (e.request.method !== 'GET' || u.pathname.startsWith('/api/') || u.pathname.startsWith('/hls/') || u.pathname.startsWith('/alerts/') || u.pathname.startsWith('/download/')) return;
   e.respondWith(fetch(e.request).catch(() => caches.match(e.request)));
 });
 self.addEventListener('push', e => {

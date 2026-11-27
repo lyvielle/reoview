@@ -1,8 +1,9 @@
-import atexit, base64, ipaddress, json, os, re, shutil, socket, subprocess, threading, time, urllib.request, uuid
+import atexit, base64, ipaddress, json, os, re, shutil, socket, subprocess, threading, time, urllib.error, urllib.request, uuid
 from datetime import datetime
 from urllib.parse import quote, urlencode
 
-from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives import hashes, serialization
+from cryptography.hazmat.primitives.asymmetric import padding
 from py_vapid import Vapid
 from pywebpush import WebPushException, webpush
 
@@ -58,6 +59,14 @@ find_jobs = {}
 find_sem = threading.Semaphore(1)  # one heavy search/convert at a time
 settings = {"start": "00:00", "end": "00:00", "away": False, "types": {k: True for k in TYPE_KEYS},
             "retention_on": False, "retention_days": 30, "lowspace_on": False, "lowspace_gb": 10}
+FCM_KEY = os.path.join(DATA, "fcm-service-account.json")  # Firebase service account; FCM is off without it
+FCM_JSON = os.path.join(DATA, "fcm_tokens.json")
+fcm_tokens = []
+fcm_auth = ("", 0)  # (access token, expires)
+APK_DIR = os.path.join(DATA, "apk")
+APK_REPO = os.environ.get("REOVIEW_APK_REPO", "lyvielle/reoview")
+APK_CHECK_H = float(os.environ.get("REOVIEW_APK_CHECK_H", "6"))  # 0 = never check GitHub for new app releases
+APK_RE = re.compile(r"reoview-(\d+(?:\.\d+)*)\.apk")
 
 
 def load():
@@ -613,6 +622,108 @@ def init_vapid():
     return base64.urlsafe_b64encode(raw).rstrip(b"=").decode()
 
 
+def b64url(b):
+    return base64.urlsafe_b64encode(b).rstrip(b"=").decode()
+
+
+def fcm_access_token(key):
+    """OAuth token for the FCM HTTP v1 API from a service-account JWT (RS256), cached until shortly before expiry."""
+    global fcm_auth
+    if fcm_auth[1] > time.time():
+        return fcm_auth[0]
+    now = int(time.time())
+    claims = {"iss": key["client_email"], "scope": "https://www.googleapis.com/auth/firebase.messaging",
+              "aud": key["token_uri"], "iat": now, "exp": now + 3600}
+    unsigned = b64url(b'{"alg":"RS256","typ":"JWT"}') + "." + b64url(json.dumps(claims).encode())
+    pk = serialization.load_pem_private_key(key["private_key"].encode(), None)
+    jwt = unsigned + "." + b64url(pk.sign(unsigned.encode(), padding.PKCS1v15(), hashes.SHA256()))
+    body = urlencode({"grant_type": "urn:ietf:params:oauth:grant-type:jwt-bearer", "assertion": jwt}).encode()
+    with urllib.request.urlopen(urllib.request.Request(key["token_uri"], data=body), timeout=20) as r:
+        resp = json.load(r)
+    fcm_auth = (resp["access_token"], time.time() + int(resp.get("expires_in", 3600)) - 300)
+    return fcm_auth[0]
+
+
+def notify_fcm(data):
+    """Send a data message to every registered Android app; tokens FCM reports as gone are dropped."""
+    key = jload(FCM_KEY, None)
+    with lock:
+        current = list(fcm_tokens)
+    if not key or not current:
+        return
+    try:
+        auth = fcm_access_token(key)
+    except Exception as e:
+        print(f"[reoview] fcm auth failed: {e}", flush=True)
+        return
+    url = f"https://fcm.googleapis.com/v1/projects/{key['project_id']}/messages:send"
+    dead = []
+    for tok in current:
+        msg = {"message": {"token": tok, "data": data, "android": {"priority": "high", "ttl": "3600s"}}}
+        req = urllib.request.Request(url, data=json.dumps(msg).encode(), headers={
+            "Authorization": f"Bearer {auth}", "Content-Type": "application/json"})
+        try:
+            with urllib.request.urlopen(req, timeout=20):
+                print(f"[reoview] fcm sent to {tok[:12]}...", flush=True)
+        except urllib.error.HTTPError as e:
+            print(f"[reoview] fcm failed ({e.code}): {e.read()[:200].decode(errors='replace')}", flush=True)
+            if e.code == 404:  # UNREGISTERED: app uninstalled or token rotated
+                dead.append(tok)
+        except Exception as e:
+            print(f"[reoview] fcm error: {e}", flush=True)
+    if dead:
+        with lock:
+            fcm_tokens[:] = [t for t in fcm_tokens if t not in dead]
+            jsave(FCM_JSON, fcm_tokens)
+
+
+def local_apk():
+    """Newest APK in APK_DIR as (version tuple, version, filename), or None."""
+    try:
+        names = os.listdir(APK_DIR)
+    except OSError:
+        return None
+    return max(((tuple(map(int, m[1].split("."))), m[1], m[0]) for m in map(APK_RE.fullmatch, names) if m),
+               default=None)
+
+
+def fetch_apk():
+    """Download the APK of the latest GitHub release into APK_DIR if it is newer than the local one."""
+    hdr = {"Accept": "application/vnd.github+json", "User-Agent": "reoview"}
+    with urllib.request.urlopen(urllib.request.Request(
+            f"https://api.github.com/repos/{APK_REPO}/releases/latest", headers=hdr), timeout=20) as r:
+        rel = json.load(r)
+    asset = next((a for a in rel.get("assets", []) if APK_RE.fullmatch(a.get("name", ""))), None)
+    if not asset:
+        return
+    ver = tuple(map(int, APK_RE.fullmatch(asset["name"])[1].split(".")))
+    have = local_apk()
+    if have and have[0] >= ver:
+        return
+    os.makedirs(APK_DIR, exist_ok=True)
+    tmp = os.path.join(APK_DIR, "download.tmp")
+    with urllib.request.urlopen(urllib.request.Request(asset["browser_download_url"],
+                                                       headers={"User-Agent": "reoview"}), timeout=60) as r:
+        with open(tmp, "wb") as f:
+            shutil.copyfileobj(r, f)
+    if os.path.getsize(tmp) != asset["size"]:
+        os.remove(tmp)
+        raise RuntimeError(f"incomplete download of {asset['name']}")
+    os.replace(tmp, os.path.join(APK_DIR, asset["name"]))
+    if have:
+        os.remove(os.path.join(APK_DIR, have[2]))
+    print(f"[reoview] app {asset['name']} downloaded from {APK_REPO}", flush=True)
+
+
+def apk_updater():
+    while not closing:
+        try:
+            fetch_apk()
+        except Exception as e:
+            print(f"[reoview] app update check failed: {e}", flush=True)
+        time.sleep(APK_CHECK_H * 3600)
+
+
 def api_lock(cam):
     return api_locks.setdefault(cam["id"], threading.Lock())
 
@@ -681,7 +792,9 @@ def fetch_devname(cam):
 
 
 def notify(cam, body, tag):
-    payload = json.dumps({"title": cam["name"], "body": body, "tag": tag, "url": "/#alerts"})
+    data = {"title": cam["name"], "body": body, "tag": tag, "url": "/#alerts"}
+    notify_fcm(data)
+    payload = json.dumps(data)
     with lock:
         current = list(subs)
     dead = []
@@ -916,6 +1029,17 @@ def edit_camera(cid):
     return jsonify(public(cam))
 
 
+@app.post("/api/cameras/<cid>/move")
+def move_camera(cid):
+    step = -1 if (request.get_json(force=True, silent=True) or {}).get("dir") == "left" else 1
+    with lock:
+        i = cameras.index(get_cam(cid))
+        if 0 <= i + step < len(cameras):
+            cameras[i], cameras[i + step] = cameras[i + step], cameras[i]
+            save()
+    return jsonify([public(c) for c in cameras])
+
+
 @app.delete("/api/cameras/<cid>")
 def delete_camera(cid):
     with lock:
@@ -985,6 +1109,34 @@ def push_unsubscribe():
         subs[:] = [x for x in subs if x["endpoint"] != ep]
         save_subs()
     return "", 204
+
+
+@app.post("/api/fcm/register")
+def fcm_register():
+    tok = (request.get_json(force=True, silent=True) or {}).get("token")
+    if not isinstance(tok, str) or not 20 <= len(tok) <= 4096:
+        return jsonify(error="Invalid token"), 400
+    with lock:
+        if tok not in fcm_tokens:
+            fcm_tokens.append(tok)
+            jsave(FCM_JSON, fcm_tokens)
+    return "", 204
+
+
+@app.get("/api/app")
+def app_info():
+    hit = local_apk()
+    if not hit:
+        return jsonify(version=None)
+    st = os.stat(os.path.join(APK_DIR, hit[2]))
+    return jsonify(version=hit[1], size=st.st_size, ts=st.st_mtime)
+
+
+@app.get("/download/app")
+def app_download():
+    hit = local_apk() or abort(404)
+    return send_from_directory(APK_DIR, hit[2], as_attachment=True,
+                               mimetype="application/vnd.android.package-archive")
 
 
 @app.get("/api/storage")
@@ -1229,7 +1381,10 @@ atexit.register(stop_all)
 load()
 load_subs()
 load_state()
+fcm_tokens = jload(FCM_JSON, [])
 VAPID_PUB = init_vapid()
 for _c in cameras:
     start(_c)
 threading.Thread(target=monitor, daemon=True).start()
+if APK_CHECK_H > 0 and APK_REPO:
+    threading.Thread(target=apk_updater, daemon=True).start()
