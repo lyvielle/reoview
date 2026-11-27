@@ -4,8 +4,10 @@ import android.Manifest
 import android.app.Activity
 import android.app.AlertDialog
 import android.app.DownloadManager
+import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.graphics.Color
 import android.net.Uri
 import android.os.Build
@@ -137,8 +139,30 @@ class MainActivity : Activity() {
             .setTitle(name)
             .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
             .setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, name)
-        getSystemService(DownloadManager::class.java).enqueue(req)
+        val id = getSystemService(DownloadManager::class.java).enqueue(req)
+        if (name.endsWith(".apk")) installWhenDone(id)
         Toast.makeText(this, "Downloading $name", Toast.LENGTH_SHORT).show()
+    }
+
+    /** Hand a finished APK download to the system installer (the update button on the web page). */
+    private fun installWhenDone(id: Long) {
+        val receiver = object : BroadcastReceiver() {
+            override fun onReceive(c: Context, i: Intent) {
+                if (i.getLongExtra(DownloadManager.EXTRA_DOWNLOAD_ID, -1) != id) return
+                unregisterReceiver(this)
+                val uri = getSystemService(DownloadManager::class.java).getUriForDownloadedFile(id) ?: return  // failed
+                try {
+                    startActivity(Intent(Intent.ACTION_VIEW)
+                        .setDataAndType(uri, "application/vnd.android.package-archive")
+                        .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK))
+                } catch (e: Exception) {
+                    Toast.makeText(c, "Open the APK in Downloads to install it", Toast.LENGTH_LONG).show()
+                }
+            }
+        }
+        val filter = IntentFilter(DownloadManager.ACTION_DOWNLOAD_COMPLETE)
+        if (Build.VERSION.SDK_INT >= 33) registerReceiver(receiver, filter, RECEIVER_EXPORTED)  // sent by the download provider
+        else registerReceiver(receiver, filter)
     }
 
     @Deprecated("Deprecated in Java")

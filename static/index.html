@@ -59,7 +59,7 @@ h2 small{font-weight:400}
 .ctl svg{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
 .ctl button.on{background:#fef3c7;color:#92400e}.ctl button.alarm{background:var(--bad);color:#fff}
 .bar button.mv{padding:6px;display:inline-flex}.bar svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
-#getapp{margin-top:auto}
+#getapp,#update{margin-top:auto}
 .name{font-weight:600}.ip{color:var(--muted);font-size:13px}
 .dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--muted);margin-right:8px}
 .card.live .dot{background:var(--ok)}
@@ -145,6 +145,7 @@ details{margin-top:12px;color:var(--muted);font-size:13px}
     <a href="#settings" data-tab="settings"><svg viewBox="0 0 24 24"><path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6"/></svg>Settings</a>
   </nav>
   <nav id="getapp"><a href="#app" data-tab="app"><svg viewBox="0 0 24 24"><rect x="5" y="2" width="14" height="20" rx="2"/><path d="M12 8v7M9 12l3 3 3-3M11 18h2"/></svg>Get the app</a></nav>
+  <nav id="update" hidden><a href="/download/app"><svg viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-3-6.7L21 8M21 3v5h-5"/></svg><span>Update to <span id="updver"></span></span></a></nav>
 </aside>
 <div id="scrim"></div>
 
@@ -246,6 +247,7 @@ const ICON_SIREN='<svg viewBox="0 0 24 24"><path d="M7 18v-6a5 5 0 1 1 10 0v6M5 
 const NOPOSTER='data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==';
 const PAGES={cameras:'Camera(s)',alerts:'Alerts',logs:'Logs',settings:'Settings',app:'Get the app'};
 const inApp=/ReoviewApp/.test(navigator.userAgent);  // set by the Android app's WebView
+const appVer=(navigator.userAgent.match(/ReoviewApp\/([\d.]+)/)||[])[1];
 const TYPES={person:'Person',animal:'Animal',vehicle:'Vehicle',other:'Other'};
 const grid=$('grid'),cards=new Map(),view=$('view'),vv=$('vv'),aview=$('aview'),av=$('av'),aimg=$('aimg');
 av.poster=NOPOSTER;
@@ -529,6 +531,13 @@ async function loadApp(){
   }catch{$('appinfo').textContent='Could not reach the server.'}
 }
 $('getapp').hidden=inApp;
+const newer=(a,b)=>{const x=a.split('.').map(Number),y=b.split('.').map(Number);
+  for(let i=0;i<Math.max(x.length,y.length);i++)if((x[i]||0)!==(y[i]||0))return (x[i]||0)>(y[i]||0);return false};
+async function checkUpdate(){  // the app downloads /download/app and starts the installer itself
+  try{const a=await (await fetch('/api/app')).json();
+    $('update').hidden=!(a.version&&appVer&&newer(a.version,appVer));$('updver').textContent=a.version||''}catch{}
+}
+if(inApp)checkUpdate();
 
 /* ---------- push ---------- */
 const b64=k=>Uint8Array.from(atob((k+'='.repeat((4-k.length%4)%4)).replace(/-/g,'+').replace(/_/g,'/')),c=>c.charCodeAt(0));
@@ -560,7 +569,7 @@ else{$('pushsw').disabled=true;$('pushnote').textContent='Needs HTTPS and the in
 /* ---------- start ---------- */
 show(location.hash.slice(1));
 load();loadAlerts();fetch('/api/settings').then(r=>r.json()).then(s=>{S=s;$('awaypill').hidden=!s.away});
-setInterval(()=>{load();loadAlerts();if(tab==='logs')loadLogs();
+setInterval(()=>{load();loadAlerts();if(tab==='logs')loadLogs();if(inApp&&tick%60===59)checkUpdate();
   if(++tick%3===0&&tab==='cameras'&&!document.hidden)cards.forEach((_,id)=>refreshLight(id))},10000);
 </script>
 </body>
