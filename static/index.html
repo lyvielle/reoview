@@ -266,7 +266,7 @@ function attach(src,video,dot,alive){
   video.onplaying=()=>dot.classList.add('live');
   video.onwaiting=()=>dot.classList.remove('live');
 }
-function stopVideo(v){v.onerror=null;v.onplaying=null;v.onwaiting=null;if(v._hls){v._hls.destroy();v._hls=null}v.pause();v.removeAttribute('src');v.load()}
+function stopVideo(v){v.onerror=null;v.onplaying=null;v.onwaiting=null;v.onloadedmetadata=null;if(v._hls){v._hls.destroy();v._hls=null}v.pause();v.removeAttribute('src');v.load()}
 
 /* ---------- navigation ---------- */
 function show(t){
@@ -395,7 +395,10 @@ function setMode(m){
   }else if(m==='live'){
     av.muted=true;av.autoplay=true;attach(`/hls/${cur.cam_id}/index.m3u8`,av,document.createElement('span'),()=>aview.open&&mode==='live');
   }else{
-    av.muted=false;av.autoplay=false;av.src=`/alerts/${cur.id}/video`;dl=`/alerts/${cur.id}/video?download=1`;
+    av.muted=false;av.autoplay=false;av.hidden=true;msg('Loading the video…');dl=`/alerts/${cur.id}/video?download=1`;
+    av.onloadedmetadata=()=>{av.hidden=false;msg('')};
+    av.onerror=()=>{av.hidden=true;msg('This video could not be played on this device. Use Download to save it.')};
+    av.src=`/alerts/${cur.id}/video`;av.play().catch(()=>{});  // tab tap is the user gesture, so playback may start with sound
   }
   const d=$('adl');
   if(dl){d.href=dl;d.removeAttribute('aria-disabled')}else{d.removeAttribute('href');d.setAttribute('aria-disabled','true')}
