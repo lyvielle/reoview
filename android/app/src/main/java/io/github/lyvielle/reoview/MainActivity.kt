@@ -8,6 +8,7 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.content.pm.ActivityInfo
 import android.graphics.Color
 import android.net.Uri
 import android.os.Build
@@ -84,12 +85,17 @@ class MainActivity : Activity() {
                 (window.decorView as FrameLayout).addView(view, FrameLayout.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
                 web.visibility = View.GONE
+                requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE  // also with auto-rotate off
+                @Suppress("DEPRECATION")
+                view.systemUiVisibility = View.SYSTEM_UI_FLAG_FULLSCREEN or View.SYSTEM_UI_FLAG_HIDE_NAVIGATION or
+                    View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
             }
 
             override fun onHideCustomView() {
                 (window.decorView as FrameLayout).removeView(full)
                 full = null
                 web.visibility = View.VISIBLE
+                requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
                 fullDone?.onCustomViewHidden()
             }
         }

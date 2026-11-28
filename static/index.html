@@ -50,6 +50,11 @@ h2 small{font-weight:400}
 .card.live video{opacity:1}
 .vbox .spin{position:absolute;top:50%;left:50%;margin:-17px 0 0 -17px;border-color:#d1d5db;border-top-color:var(--accent);pointer-events:none}
 .card.live .vbox .spin{display:none}
+.vbox .fsx{display:none}
+.vbox:fullscreen{background:#000;display:flex;align-items:center;justify-content:center}
+.vbox:fullscreen video{width:100%;height:100%;aspect-ratio:auto;object-fit:contain;cursor:default}
+.vbox:fullscreen .fsx{display:inline-flex;position:absolute;top:16px;right:16px;width:44px;height:44px;padding:0;align-items:center;justify-content:center;border-radius:50%;background:rgba(0,0,0,.5);color:#fff}
+.vbox .fsx svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round}
 .bar{display:flex;align-items:center;justify-content:space-between;padding:10px 14px}
 .ctl{display:flex;gap:8px;padding:0 14px 12px}.ctl button{flex:none;width:44px;height:38px;padding:0;display:inline-flex;align-items:center;justify-content:center}
 .ctl button.busy{position:relative;pointer-events:none}
@@ -58,7 +63,8 @@ h2 small{font-weight:400}
 @keyframes spin{to{transform:rotate(360deg)}}
 .ctl svg{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
 .ctl button.on{background:#fef3c7;color:#92400e}.ctl button.alarm{background:var(--bad);color:#fff}
-.bar button.mv{padding:6px;display:inline-flex}.bar svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.bar>div:first-child{min-width:0}.bar>div:last-child{display:flex;flex:none}.bar .name,.bar .ip{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.bar button.ghost{padding:6px 8px}.bar button.mv,.bar button.fs{padding:6px;display:inline-flex}.bar svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
 #getapp,#update{margin-top:auto}
 .name{font-weight:600}.ip{color:var(--muted);font-size:13px}
 .dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--muted);margin-right:8px}
@@ -293,10 +299,13 @@ const playCard=id=>{const k=cards.get(id);k.on=true;attach(`/hls/${id}/index.m3u
 function pauseCard(k){k.on=false;stopVideo(k.video);k.el.classList.remove('live')}
 function addCard(c){
   const el=document.createElement('div');el.className='card';
-  el.innerHTML=`<div class="vbox"><video muted autoplay playsinline></video><div class="spin"></div></div><div class="bar"><div><div class="name"><span class="dot"></span>${esc(c.name)}</div><div class="ip">${esc(c.ip)}</div></div><div><button class="ghost mv" data-d="left" title="Move left" aria-label="Move left"><svg viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6"/></svg></button><button class="ghost mv" data-d="right" title="Move right" aria-label="Move right"><svg viewBox="0 0 24 24"><path d="M9 18l6-6-6-6"/></svg></button><button class="ghost ed">Edit</button><button class="ghost rm">Remove</button></div></div><div class="ctl"><button class="soft lt" disabled title="Light" aria-label="Light">${ICON_LIGHT}</button><button class="soft sr" title="Siren" aria-label="Siren">${ICON_SIREN}</button></div>`;
+  el.innerHTML=`<div class="vbox"><video muted autoplay playsinline></video><div class="spin"></div><button class="fsx" title="Close full screen" aria-label="Close full screen"><svg viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div><div class="bar"><div><div class="name"><span class="dot"></span>${esc(c.name)}</div><div class="ip">${esc(c.ip)}</div></div><div><button class="ghost mv" data-d="left" title="Move left" aria-label="Move left"><svg viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6"/></svg></button><button class="ghost mv" data-d="right" title="Move right" aria-label="Move right"><svg viewBox="0 0 24 24"><path d="M9 18l6-6-6-6"/></svg></button><button class="ghost fs" title="Full screen" aria-label="Full screen"${document.fullscreenEnabled?'':' hidden'}><svg viewBox="0 0 24 24"><path d="M8 3H5a2 2 0 0 0-2 2v3M21 8V5a2 2 0 0 0-2-2h-3M16 21h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg></button><button class="ghost ed">Edit</button><button class="ghost rm">Remove</button></div></div><div class="ctl"><button class="soft lt" disabled title="Light" aria-label="Light">${ICON_LIGHT}</button><button class="soft sr" title="Siren" aria-label="Siren">${ICON_SIREN}</button></div>`;
   const video=el.querySelector('video');
   video.onclick=()=>{$('vt').textContent=c.name;attach(`/hls/${c.id}/index.m3u8`,vv,document.createElement('span'),()=>view.open);view.showModal()};
   el.querySelector('.ed').onclick=()=>openDlg(c);
+  el.querySelector('.fs').onclick=async()=>{  // the app rotates natively; browsers need the orientation lock
+    try{await el.querySelector('.vbox').requestFullscreen();await screen.orientation.lock('landscape')}catch{}};
+  el.querySelector('.fsx').onclick=()=>document.exitFullscreen();
   el.querySelectorAll('.mv').forEach(b=>b.onclick=async()=>{await fetch(`/api/cameras/${c.id}/move`,{method:'POST',headers:J,body:JSON.stringify({dir:b.dataset.d})});load()});
   el.querySelector('.rm').onclick=async()=>{if(confirm(`Remove ${c.name}?`)){await fetch(`/api/cameras/${c.id}`,{method:'DELETE'});load()}};
   const k={el,video,lt:el.querySelector('.lt'),sr:el.querySelector('.sr'),siren:false};
